@@ -215,7 +215,7 @@ function set_cgns_root!(root)
     elseif HDF5.API.H5T_NATIVE_FLOAT == HDF5.API.H5T_IEEE_F64LE
         format = "IEEE_LITTLE_64"
     else
-        @warn "Could determine float type, assuming IEEE_LITTLE_32"
+        @warn "Could not determine float type, assuming IEEE_LITTLE_32"
         format = "IEEE_LITTLE_32"
     end
     root[" format"] = str2int8(format)

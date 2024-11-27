@@ -449,20 +449,6 @@ function compute_space_dim(topodim, coords, tol = 1e-15, verbose = true)
 end
 
 """
-Indicate if the Elements node contains "volumic" entities (with respect
-to the `topo_dim` argument)
-"""
-function is_volumic_entity(obj, topo_dim)
-    @assert get_cgns_type(obj) == "Elements_t"
-    code, _ = get_value(obj)
-    return is_volumic_entity(code, topo_dim)
-end
-
-function is_volumic_entity(code::Integer, topo_dim)
-    Bcube.topodim(cgns_entity_to_bcube_entity(code)) == topo_dim
-end
-
-"""
 Return nnodes, ncells, nbnd
 """
 function get_zone_dims(zone)

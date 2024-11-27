@@ -47,7 +47,7 @@ end
 """
 We could make this function type-stable by converting the "type" attribute to a type-parameter of `Node`
 """
-function get_value(n::Node)
+function jld2_get_value(n::Node)
     data_type = get_data_type(n)
     data = get_wrapped_node(n)[" data"]
     if data_type == "C1"
@@ -59,14 +59,14 @@ function get_value(n::Node)
     end
 end
 
-function get_child(parent; name = "", type = "")
+function jld2_get_child(parent; name = "", type = "")
     for child_name in keys(get_wrapped_node(parent))
         child = Node(parent, child_name)
         child_match(child, name, type) && (return child)
     end
 end
 
-function get_children(parent; name = "", type = "")
+function jld2_get_children(parent; name = "", type = "")
     filtered = filter(
         child_name -> child_match(Node(parent, child_name), name, type),
         keys(get_wrapped_node(parent)),

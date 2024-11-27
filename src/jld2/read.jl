@@ -17,7 +17,7 @@ function Bcube.read_file(
     root = Node(f)
 
     # Find the list of CGNSBase_t
-    cgnsBases = get_children(root; type = "CGNSBase_t")
+    cgnsBases = jld2_get_children(root; type = "CGNSBase_t")
     if length(cgnsBases) == 0
         error("Could not find any CGNSBase_t node in the file")
     elseif length(cgnsBases) > 1
@@ -26,13 +26,13 @@ function Bcube.read_file(
     cgnsBase = first(cgnsBases)
 
     # Read base dimensions (topo and space)
-    dims = get_value(cgnsBase)
+    dims = jld2_get_value(cgnsBase)
     topodim = topodim > 0 ? topodim : dims[1]
     spacedim = spacedim > 0 ? spacedim : dims[2]
     verbose && println("topodim = $topodim, spacedim = $spacedim")
 
     # Find the list of Zone_t
-    zones = get_children(cgnsBase; type = "Zone_t")
+    zones = jld2_get_children(cgnsBase; type = "Zone_t")
     if length(zones) == 0
         error("Could not find any Zone_t node in the file")
     elseif length(zones) > 1
@@ -41,17 +41,17 @@ function Bcube.read_file(
     zone = first(zones)
 
     # Read zone
-    zoneCGNS = read_zone(zone, varnames, topodim, spacedim, verbose)
+    zoneCGNS = jld2_read_zone(zone, varnames, topodim, spacedim, verbose)
 
     # Close the file
     close(f)
 
     # Build Bcube Mesh
-    mesh = cgns_mesh_to_bcube_mesh(zoneCGNS)
+    mesh = jld2_cgns_mesh_to_bcube_mesh(zoneCGNS)
 
     # Build Bcube MeshCellData & MeshPointData
     if !isnothing(varnames)
-        data = flow_solutions_to_bcube_data(zoneCGNS.fSols)
+        data = jld2_flow_solutions_to_bcube_data(zoneCGNS.fSols)
     else
         data = nothing
     end
@@ -63,7 +63,7 @@ end
 """
 Convert CGNS Zone information into a Bcube `Mesh`.
 """
-function cgns_mesh_to_bcube_mesh(zoneCGNS)
+function jld2_cgns_mesh_to_bcube_mesh(zoneCGNS)
     nodes = [Bcube.Node(zoneCGNS.coords[i, :]) for i in 1:size(zoneCGNS.coords, 1)]
     # nodes = map(row -> Bcube.Node(row), eachrow(zoneCGNS.coords)) # problem with Node + Slice
 
@@ -81,7 +81,7 @@ The input `fSols` is suppose to be a dictionnary FlowSolutionName => (gridlocati
 
 The output is a dictionnary FlowSolutionName => dictionnary(varname => MeshData)
 """
-function flow_solutions_to_bcube_data(fSols)
+function jld2_flow_solutions_to_bcube_data(fSols)
     # length(fSols) == 0 && (return Dict(), Dict())
 
     # pointSols = filter(fs -> fs.gridLocation == "Vertex", fSols)
@@ -115,29 +115,29 @@ cell-to-node connectivity, boundaries (see `read_zoneBC`), and a dictionnary of 
 
 -> (; coords, c2t, c2n, bcs, fSols)
 """
-function read_zone(zone, varnames, topo_dim, space_dim, verbose)
+function jld2_read_zone(zone, varnames, topo_dim, space_dim, verbose)
     # Preliminary check
-    zoneType = get_value(get_child(zone; type = "ZoneType_t"))
+    zoneType = jld2_get_value(jld2_get_child(zone; type = "ZoneType_t"))
     @assert zoneType == "Unstructured" "Only unstructured zone are supported"
 
     # Number of elements
-    nvertices, ncells, nbnd = get_value(zone)
+    nvertices, ncells, nbnd = jld2_get_value(zone)
     verbose && println("nvertices = $nvertices, ncells = $ncells")
 
     # Read GridCoordinates
-    gridCoordinates = get_child(zone; type = "GridCoordinates_t")
-    coordXNode = get_child(gridCoordinates; name = "CoordinateX")
-    X = get_value(coordXNode)
+    gridCoordinates = jld2_get_child(zone; type = "GridCoordinates_t")
+    coordXNode = jld2_get_child(gridCoordinates; name = "CoordinateX")
+    X = jld2_get_value(coordXNode)
     coords = zeros(eltype(X), nvertices, space_dim)
     coords[:, 1] .= X
     suffixes = ["X", "Y", "Z"]
     for (idim, suffix) in enumerate(suffixes[1:space_dim])
-        node = get_child(gridCoordinates; name = "Coordinate" * suffix)
-        coords[:, idim] .= get_value(node)
+        node = jld2_get_child(gridCoordinates; name = "Coordinate" * suffix)
+        coords[:, idim] .= jld2_get_value(node)
     end
 
     # Read all elements
-    elts = map(read_connectivity, get_children(zone; type = "Elements_t"))
+    elts = map(jld2_read_connectivity, jld2_get_children(zone; type = "Elements_t"))
 
     # Filter "volumic" elements to build the volumic connectivities arrays
     volumicElts = filter(elt -> is_volumic_entity(first(elt.c2t), topo_dim), elts)
@@ -145,12 +145,12 @@ function read_zone(zone, varnames, topo_dim, space_dim, verbose)
     c2n = mapreduce(elt -> elt.c2n, vcat, volumicElts)
 
     # Read all BCs and then keep only the ones whose topo dim is equal to the base topo dim minus 1
-    bcs = read_zoneBC(zone, elts, verbose)
+    bcs = jld2_read_zoneBC(zone, elts, verbose)
     filter!(bc -> (bc.bcdim == topo_dim - 1) || (bc.bcdim == -1), bcs)
 
     # Read FlowSolutions
     if !isnothing(varnames)
-        fSols = read_solutions(zone, varnames, verbose)
+        fSols = jld2_read_solutions(zone, varnames, verbose)
     else
         fSols = nothing
     end
@@ -168,9 +168,10 @@ Read the "ZoneBC_t" node to build bnd connectivities.
 
 See `read_bc` for more information of what is returned.
 """
-function read_zoneBC(zone, elts, verbose)
-    zoneBC = get_child(zone; type = "ZoneBC_t")
-    bcs = map(bc -> read_bc(bc, elts, verbose), get_children(zoneBC; type = "BC_t"))
+function jld2_read_zoneBC(zone, elts, verbose)
+    zoneBC = jld2_get_child(zone; type = "ZoneBC_t")
+    bcs =
+        map(bc -> jld2_read_BC(bc, elts, verbose), jld2_get_children(zoneBC; type = "BC_t"))
     return bcs
 end
 
@@ -180,16 +181,16 @@ Read a BC node.
 Return a named Tuple (bcname, bcnodes, bcdim) where bcnodes is an array of the nodes
 belonging to this BC.
 """
-function read_bc(bc, elts, verbose)
+function jld2_read_BC(bc, elts, verbose)
     # BC name
-    familyName = get_child(bc; type = "FamilyName_t")
-    bcname = isnothing(familyName) ? get_name(bc) : get_value(familyName)
+    familyName = jld2_get_child(bc; type = "FamilyName_t")
+    bcname = isnothing(familyName) ? get_name(bc) : jld2_get_value(familyName)
     verbose && println("Reading BC '$bcname'")
 
     # BC connectivity
-    bc_type = get_value(get_child(bc; type = "GridLocation_t"))
-    indexRange = get_child(bc; type = "IndexRange_t")
-    pointList = get_child(bc; type = "IndexArray_t")
+    bc_type = jld2_get_value(jld2_get_child(bc; type = "GridLocation_t"))
+    indexRange = jld2_get_child(bc; type = "IndexRange_t")
+    pointList = jld2_get_child(bc; type = "IndexArray_t")
 
     # BC topodim : it's not always possible to determine it, so it's negative by default
     bcdim = -1
@@ -199,7 +200,7 @@ function read_bc(bc, elts, verbose)
             verbose && println("GridLocation is $(bc_type) with IndexRange")
 
             # This is a bit complex because nothing prevents an IndexRange to span over multiples Elements_t
-            erange = get_value(indexRange)
+            erange = jld2_get_value(indexRange)
 
             # Allocate the array of node indices corresponding to the BC
             nelts_bc = erange[2] - erange[1] + 1
@@ -259,7 +260,7 @@ function read_bc(bc, elts, verbose)
 
         elseif !isnothing(pointList)
             # Elements indices
-            elts_ind = vec(get_value(pointList))
+            elts_ind = vec(jld2_get_value(pointList))
             sort!(elts_ind)
 
             # Allocate the array of node indices corresponding to the BC
@@ -304,9 +305,9 @@ function read_bc(bc, elts, verbose)
         end
     elseif bc_type == "Vertex"
         if !isnothing(pointList)
-            bcnodes = get_value(pointList)
+            bcnodes = jld2_get_value(pointList)
         elseif !isnothing(indexRange)
-            erange = get_value(indexRange)
+            erange = jld2_get_value(indexRange)
             bcnodes = collect(erange[1]:erange[2])
         else
             error("Could not find either the PointRange nor the PointList")
@@ -326,9 +327,9 @@ Read all the flow solutions in the Zone, filtering data arrays whose name is not
 
 # TODO : check if all varnames have been found
 """
-function read_solutions(zone, varnames, verbose)
+function jld2_read_solutions(zone, varnames, verbose)
     # fSols =
-    #     map(fs -> read_solution(fs, varnames), get_children(zone; type = "FlowSolution_t"))
+    #     map(fs -> jld2_read_solution(fs, varnames), jld2_get_children(zone; type = "FlowSolution_t"))
 
     # n_vertex_fsol = count(fs -> fs.gridLocation == "Vertex", fSols)
     # n_cell_fsol = count(fs -> fs.gridLocation == "CellCenter", fSols)
@@ -343,8 +344,8 @@ function read_solutions(zone, varnames, verbose)
     # end
 
     fSols = Dict(
-        get_name(fs) => read_solution(fs, varnames) for
-        fs in get_children(zone; type = "FlowSolution_t")
+        get_name(fs) => jld2_read_solution(fs, varnames) for
+        fs in jld2_get_children(zone; type = "FlowSolution_t")
     )
 
     return fSols
@@ -355,40 +356,26 @@ Read a FlowSolution node.
 
 Return a NamedTuple with flow solution name, grid location and array of vectors.
 """
-function read_solution(fs, varnames)
+function jld2_read_solution(fs, varnames)
     # Read GridLocation : we could deal with a missing GridLocation node, by later comparing
     # the length of the DataArray to the number of cells / nodes of the zone. Let's do this
     # later.
-    node = get_child(fs; type = "GridLocation_t")
+    node = jld2_get_child(fs; type = "GridLocation_t")
     @assert !isnothing(node) "Missing GridLocation in FlowSolution '$(get_name(fs))'"
-    gridLocation = get_value(node)
+    gridLocation = jld2_get_value(node)
 
     # Read variables matching asked "varnames"
-    dArrays = get_children(fs; type = "DataArray_t")
+    dArrays = jld2_get_children(fs; type = "DataArray_t")
     if varnames != "*"
         # filter to obtain only the desired variables names
         filter!(dArray -> get_name(dArray) in varnames, dArrays)
     end
-    data = Dict(get_name(dArray) => get_value(dArray) for dArray in dArrays)
+    data = Dict(get_name(dArray) => jld2_get_value(dArray) for dArray in dArrays)
 
     # Flow solution name
     name = get_name(fs)
 
     return (; name, gridLocation, data)
-end
-
-"""
-Indicate if the Elements node contains "volumic" entities (with respect
-to the `topo_dim` argument)
-"""
-function is_volumic_entity(node::Node, topo_dim)
-    @assert get_cgns_type(node) == "Elements_t"
-    code, _ = get_value(node)
-    return is_volumic_entity(code, topo_dim)
-end
-
-function is_volumic_entity(code, topo_dim)
-    Bcube.topodim(cgns_entity_to_bcube_entity(code)) == topo_dim
 end
 
 """
@@ -398,17 +385,17 @@ Read an "Elements_t" node and returns a named Tuple of three elements:
 * `c2n`, the cell -> node connectivity, flattened if `reshape = false`, as an array (nelts, nnodes_by_elt) if `reshape = true`
 * `name`, only for dbg
 """
-function read_connectivity(node, reshape = false)
+function jld2_read_connectivity(node, reshape = false)
     @assert get_cgns_type(node) == "Elements_t"
 
     # Build cell to (cgns) type
-    code, _ = get_value(node)
-    erange = get_value(get_child(node; name = "ElementRange"))
+    code, _ = jld2_get_value(node)
+    erange = jld2_get_value(jld2_get_child(node; name = "ElementRange"))
     nelts = erange[2] - erange[1] + 1
     c2t = fill(code, nelts)
 
     # Build cell to node and reshapce
-    c2n = get_value(get_child(node; name = "ElementConnectivity"))
+    c2n = jld2_get_value(jld2_get_child(node; name = "ElementConnectivity"))
 
     nnodes_by_elt = nnodes(cgns_entity_to_bcube_entity(code))
     reshape && (c2n = reshape(c2n, nelts, nnodes_by_elt))
