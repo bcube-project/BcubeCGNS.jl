@@ -1,12 +1,13 @@
 function Bcube.read_file(
     ::CGNSJLD2IoHandler,
     filepath::String;
-    domainNames = String[],
+    domains = String[],
     varnames = nothing,
     topodim = 0,
     spacedim = 0,
     verbose = false,
 )
+    @assert length(domains) == 0 "Reading only some domains is not supported yet (but easy to implement)"
 
     # Preliminary check
     @assert length(domainNames) == 0 "domainNames arg is not supported for now, leave it empty"

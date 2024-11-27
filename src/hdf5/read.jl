@@ -1,13 +1,15 @@
 function Bcube.read_file(
     ::CGNSHDF5IoHandler,
     filepath::String;
-    domainNames = String[],
+    domains = String[],
     varnames = nothing,
     topodim = 0,
     spacedim = 0,
     verbose = false,
     kwargs...,
 )
+    @assert length(domains) == 0 "Reading only some domains is not supported yet (but easy to implement)"
+
     # Open the file
     file = h5open(filepath, "r")
     root = file
