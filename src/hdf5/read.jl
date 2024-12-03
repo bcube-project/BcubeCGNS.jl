@@ -85,7 +85,7 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
     end
 
     # Resize the `coords` array if necessary
-    _space_dim = usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords)
+    _space_dim = usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
     coords = coords[:, 1:_space_dim]
 
     # Read all elements
@@ -427,7 +427,7 @@ function flow_solutions_to_bcube_data(fSols)
     )
 end
 
-function compute_space_dim(topodim, coords, tol = 1e-15, verbose = true)
+function compute_space_dim(topodim, coords, tol = 1e-15; verbose = true)
     spacedim = size(coords, 2)
 
     xmin, xmax = extrema(view(coords, :, 1))
