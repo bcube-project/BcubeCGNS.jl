@@ -85,7 +85,8 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
     end
 
     # Resize the `coords` array if necessary
-    _space_dim = usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
+    _space_dim =
+        usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
     coords = coords[:, 1:_space_dim]
 
     # Read all elements
