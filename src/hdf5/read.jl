@@ -162,6 +162,8 @@ end
 """
 Read a BC node.
 
+`elts` is an input corresponding to the zone connectivity "Elements" nodes.
+
 Return a named Tuple (bcname, bcnodes, bcdim) where bcnodes is an array of the nodes
 belonging to this BC.
 """
@@ -244,11 +246,11 @@ function read_bc(bc, elts, verbose)
 
         elseif !isnothing(pointList)
             # Elements indices
-            elts_ind = vec(get_value(pointList))
-            sort!(elts_ind)
+            bc_elts_ind = vec(get_value(pointList))
+            sort!(bc_elts_ind)
 
             # Allocate the array of node indices corresponding to the BC
-            nelts_bc = length(elts_ind)
+            nelts_bc = length(bc_elts_ind)
             T = eltype(first(elts).c2n[1])
             bcnodes = T[]
             sizehint!(bcnodes, nelts_bc * 4) # we assume 4 nodes by elements
@@ -260,15 +262,15 @@ function read_bc(bc, elts, verbose)
                 etype = cgns_entity_to_bcube_entity(first(elt.c2t))
                 nnodes_by_elt = nnodes(etype)
 
-                (icurr < i1) && continue
-                (icurr > i2) && continue
+                (bc_elts_ind[icurr] < i1) && continue
+                (bc_elts_ind[icurr] > i2) && continue
 
-                if elts_ind[end] >= i2
-                    iEnd = i2
+                if bc_elts_ind[end] <= i2
+                    iEnd = bc_elts_ind[end]
                 else
-                    iEnd = findfirst(i -> i > i2, view(elts_ind, icurr:nelts_bc)) - 1
+                    iEnd = findfirst(i -> i > i2, view(bc_elts_ind, icurr:nelts_bc)) - 1
                 end
-                offset = (elts_ind[icurr] - i1) * nnodes_by_elt
+                offset = (bc_elts_ind[icurr] - i1) * nnodes_by_elt
                 push!(bcnodes, elt.c2n[(1 + offset):(nnodes_by_elt * (iEnd - i1 + 1))]...)
                 icurr = iEnd + 1
 
