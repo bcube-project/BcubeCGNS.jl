@@ -121,7 +121,7 @@ function _read_eclipps_bc(bc)
     filter!(
         bcs ->
             has_child(bcs; name = "DirichletData", type = "BCData_t") ||
-                has_child(bcs; name = "NeumannData", type = "BCData_t"),
+            has_child(bcs; name = "NeumannData", type = "BCData_t"),
         bcDataSets,
     )
     data = map(_read_eclipps_bcdataset, bcDataSets)
