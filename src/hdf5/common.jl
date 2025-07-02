@@ -39,3 +39,5 @@ function get_cgns_base(obj)
     end
     return first(cgnsBases)
 end
+
+has_child(parent; kwargs...) = !isnothing(get_child(parent; kwargs...))

@@ -15,4 +15,7 @@ include("./jld2/common.jl")
 include("./jld2/read.jl")
 include("./jld2/write.jl")
 
+# Other
+include("./hdf5/eclipps_to_surf.jl")
+
 end

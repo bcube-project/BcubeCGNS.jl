@@ -17,6 +17,9 @@ function Bcube.read_file(
     # Read (unique) CGNS base
     cgnsBase = get_cgns_base(root)
 
+    # Reference state
+    refState = read_ref_state(cgnsBase)
+
     # Read base dimensions (topo and space)
     dims = get_value(cgnsBase)
     topodim = topodim > 0 ? topodim : dims[1]
@@ -49,7 +52,7 @@ function Bcube.read_file(
     end
 
     # Should we return something when pointData and/or cellData is nothing? Or remove it completely from the returned Tuple?
-    return (; mesh, data)
+    return (; mesh, data, refState)
 end
 
 """
@@ -94,6 +97,7 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
 
     # Filter "volumic" elements to build the volumic connectivities arrays
     volumicElts = filter(elt -> is_volumic_entity(first(elt.c2t), topo_dim), elts)
+    @assert length(volumicElts) > 0 "Could not find elements of topo dim = $(topo_dim) in the file"
     c2t = mapreduce(elt -> elt.c2t, vcat, volumicElts)
     c2n = mapreduce(elt -> elt.c2n, vcat, volumicElts)
 
@@ -161,6 +165,8 @@ end
 
 """
 Read a BC node.
+
+`elts` is an input corresponding to the zone connectivity "Elements" nodes.
 
 Return a named Tuple (bcname, bcnodes, bcdim) where bcnodes is an array of the nodes
 belonging to this BC.
@@ -244,11 +250,11 @@ function read_bc(bc, elts, verbose)
 
         elseif !isnothing(pointList)
             # Elements indices
-            elts_ind = vec(get_value(pointList))
-            sort!(elts_ind)
+            bc_elts_ind = vec(get_value(pointList))
+            sort!(bc_elts_ind)
 
             # Allocate the array of node indices corresponding to the BC
-            nelts_bc = length(elts_ind)
+            nelts_bc = length(bc_elts_ind)
             T = eltype(first(elts).c2n[1])
             bcnodes = T[]
             sizehint!(bcnodes, nelts_bc * 4) # we assume 4 nodes by elements
@@ -260,15 +266,15 @@ function read_bc(bc, elts, verbose)
                 etype = cgns_entity_to_bcube_entity(first(elt.c2t))
                 nnodes_by_elt = nnodes(etype)
 
-                (icurr < i1) && continue
-                (icurr > i2) && continue
+                (bc_elts_ind[icurr] < i1) && continue
+                (bc_elts_ind[icurr] > i2) && continue
 
-                if elts_ind[end] >= i2
-                    iEnd = i2
+                if bc_elts_ind[end] <= i2
+                    iEnd = bc_elts_ind[end]
                 else
-                    iEnd = findfirst(i -> i > i2, view(elts_ind, icurr:nelts_bc)) - 1
+                    iEnd = findfirst(i -> i > i2, view(bc_elts_ind, icurr:nelts_bc)) - 1
                 end
-                offset = (elts_ind[icurr] - i1) * nnodes_by_elt
+                offset = (bc_elts_ind[icurr] - i1) * nnodes_by_elt
                 push!(bcnodes, elt.c2n[(1 + offset):(nnodes_by_elt * (iEnd - i1 + 1))]...)
                 icurr = iEnd + 1
 
@@ -452,6 +458,29 @@ end
 """
 Return nnodes, ncells, nbnd
 """
-function get_zone_dims(zone)
-    d = get_value(zone)
+get_zone_dims(zone) = get_value(zone)
+
+function read_ref_state(base)
+    refState = get_child(base; name = "ReferenceState", type = "ReferenceState_t")
+    return _recursive_parse(refState, 0, 2)
+end
+
+function _recursive_parse(node, depth, max_depth)
+    # If it's a DataArray, return the value (scalar if necessary)
+    if get_cgns_type(node) == "DataArray_t"
+        x = get_value(node)
+        return length(x) > 1 ? x : first(x)
+    end
+
+    if (get_cgns_type(node) == "Descriptor_t") ||
+       has_child(node; type = "DimensionalExponents_t")
+        return get_value(node)
+    end
+
+    if depth == max_depth
+        @warn "Reached max depth when parsing ReferenceState, some entries might be missing"
+        return get_value(node)
+    end
+
+    Dict(get_name(child) => _recursive_parse(child, depth + 1, max_depth) for child in node)
 end
