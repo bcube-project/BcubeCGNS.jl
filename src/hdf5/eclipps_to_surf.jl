@@ -4,6 +4,10 @@
 Extract Bcube compatible mesh and data from a list of BC of a CGNS-ECLIPPS file.
 
 Warning : for now it is limited to only one BC because Bcube doesn't support multi zones.
+
+# Dev notes:
+    * todo : add an option to retrieve boundary conditions of the extracted surface(s)
+    * find a way to factorize the beginning of the code with `read_file`
 """
 function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     # Open the file
