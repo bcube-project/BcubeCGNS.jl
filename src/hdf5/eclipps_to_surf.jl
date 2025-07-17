@@ -13,6 +13,9 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     # Read (unique) CGNS base
     cgnsBase = get_cgns_base(root)
 
+    # Reference state
+    refState = read_ref_state(cgnsBase)
+
     # Read base dimensions (topo and space)
     topodim, spacedim = get_value(cgnsBase)
     verbose && println("topodim = $topodim, spacedim = $(spacedim)")
@@ -94,7 +97,7 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     # Close the file
     close(file)
 
-    return (; mesh, data)
+    return (; mesh, data, refState)
 end
 function extract_surf_from_eclipps(filepath::String, bcname::String; kwargs...)
     extract_surf_from_eclipps(filepath, (bcname,); kwargs...)
@@ -121,7 +124,7 @@ function _read_eclipps_bc(bc)
     filter!(
         bcs ->
             has_child(bcs; name = "DirichletData", type = "BCData_t") ||
-            has_child(bcs; name = "NeumannData", type = "BCData_t"),
+                has_child(bcs; name = "NeumannData", type = "BCData_t"),
         bcDataSets,
     )
     data = map(_read_eclipps_bcdataset, bcDataSets)
