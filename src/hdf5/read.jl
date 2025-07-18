@@ -460,9 +460,17 @@ Return nnodes, ncells, nbnd
 """
 get_zone_dims(zone) = get_value(zone)
 
+"""
+    read_ref_state(base)
+
+Read the ReferenceState node in the base.
+
+Return a Dict of (String) keys and associated values. If the ReferenceState node doesn't exist,
+`nothing` is returned.
+"""
 function read_ref_state(base)
     refState = get_child(base; name = "ReferenceState", type = "ReferenceState_t")
-    return _recursive_parse(refState, 0, 2)
+    return isnothing(refState) ? refState : _recursive_parse(refState, 0, 2)
 end
 
 function _recursive_parse(node, depth, max_depth)
