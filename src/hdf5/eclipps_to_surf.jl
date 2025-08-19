@@ -37,15 +37,9 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     coords, c2t, c2n, bcs, _ = read_zone(zone, nothing, topodim - 1, spacedim, 0, verbose)
 
     # Reshape c2n into a vector of vectors
-    nc = length(c2t)
-    offsets = zeros(Int, nc)
-    for i in 2:nc
-        offsets[i] = offsets[i - 1] + nnodes(cgns_entity_to_bcube_entity(c2t[i - 1]))
-    end
-    c2n = [
-        c2n[(offsets[i] + 1):(offsets[i] + nnodes(cgns_entity_to_bcube_entity(_c2t)))]
-        for (i, _c2t) in enumerate(c2t)
-    ]
+    offsets = cumsum(nnodes.(cgns_entity_to_bcube_entity.(c2t))) .+ 1
+    prepend!(offsets, 1)
+    c2n = [view(c2n, offsets[i]:(offsets[i + 1] - 1)) for i in 1:length(c2t)]
 
     # Read ZoneBC and filter the ones we are interested in
     zoneBC = get_child(zone; type = "ZoneBC_t")
