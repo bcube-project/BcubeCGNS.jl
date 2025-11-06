@@ -282,9 +282,8 @@ are defined by a list of faces (this necessitates faces nodes in the Elements_t 
 """
 function create_cgns_bcs(mesh, zone; verbose = false)
     zoneBC = create_cgns_node(zone, "ZoneBC", "ZoneBC_t"; type = "MT")
-    for (tag, name) in boundary_names(mesh)
-        # for (name, nodes) in zip(boundary_names(mesh), Bcube.boundary_nodes(mesh))
-        bcnodes = Bcube.boundary_nodes(mesh, tag)
+    for (symbol, bcnodes) in zip(boundary_names(mesh), Bcube.boundary_nodes(mesh))
+        name = string(symbol)
         bc = create_cgns_node(zoneBC, name, "BC_t"; type = "C1", value = str2int8("BCWall"))
         create_grid_location(bc, "Vertex")
         create_cgns_node(
