@@ -89,4 +89,31 @@
             end
         end
     end
+
+    @testset "Structured" begin
+        @testset "Eclipps" begin
+            @testset "NACA0012 ECLIPPS structured node-centered" begin
+                basename = "naca12-eclipps-structured"
+
+                # read
+                filepath = joinpath(@__DIR__, "assets", "$(basename).cgns")
+                result = BcubeCGNS.extract_surf_from_eclipps(filepath, "WALL1")
+                mesh = result.mesh
+                data = result.data["IcingWallData:DropletClass#01"]
+
+                # interpolate node-centered data on Lagrange P1
+                data = Dict(
+                    key => Bcube.convert_to_lagrange_P1(mesh, value) for
+                    (key, value) in data
+                )
+
+                # write
+                filepath = joinpath(tempdir, "$(basename).vtu")
+                write_file(filepath, mesh, data)
+
+                # test
+                @test fname2sum[basename] == bytes2hex(open(sha1, filepath))
+            end
+        end
+    end
 end
