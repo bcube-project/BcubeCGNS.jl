@@ -76,8 +76,17 @@ Note : the `zone_space_dim` is the number of spatial dimension according to the 
 function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
     # Preliminary check
     zoneType = get_value(get_child(zone; type = "ZoneType_t"))
-    @assert zoneType == "Unstructured" "Only unstructured zone are supported"
 
+    if zoneType == "Unstructured"
+        read_zone_unstr(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
+    elseif zoneType == "Structured"
+        read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
+    else
+        error("Unhandled ZoneType ($zoneType)")
+    end
+end
+
+function read_zone_unstr(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
     # Number of elements
     nvertices, ncells, nbnd = get_value(zone)
     verbose && println("nvertices = $nvertices, ncells = $ncells")
@@ -114,13 +123,83 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
     end
 
     # Read FlowSolutions
-    if !isnothing(varnames)
-        fSols = read_solutions(zone, varnames, verbose)
-    else
-        fSols = nothing
-    end
+    fSols = isnothing(varnames) ? nothing : read_solutions(zone, varnames, verbose)
 
     return (; coords, c2t, c2n, c2g, bcs, fSols)
+end
+
+function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
+    # Number of elements
+    zonedims = get_value(zone)
+    nvertices_struct = zonedims[:, 1]
+    nvertices = prod(nvertices_struct)
+    ncells_struct = zonedims[:, 2]
+    ncells = prod(ncells_struct)
+    verbose && println(
+        "nvertices = $(nvertices_struct) ($nvertices), ncells = $(ncells_struct) ($ncells)",
+    )
+
+    # Numbering conversion struct->unstr
+    # tdims = ntuple(l -> 1:nvertices_struct[l], length(nvertices_struct))
+    # ijk2I = LinearIndices(tdims)
+    N = length(ncells_struct)
+    tdims_cell = ntuple(l -> 1:ncells_struct[l], N)
+    # tdims_cell = ntuple(l -> 1:ncells_struct[N - l + 1], N)
+    ijk2I = LinearIndices(Dims(nvertices_struct))
+    @warn "check if vec is the right function to apply to coordinates"
+
+    # Read GridCoordinates
+    gridCoordinates = get_child(zone; type = "GridCoordinates_t")
+    coordXNode = get_child(gridCoordinates; name = "CoordinateX")
+    X = flatten_struct_to_unstr(get_value(coordXNode))
+    coords = zeros(eltype(X), nvertices, zone_space_dim)
+    suffixes = ["X", "Y", "Z"]
+    for (idim, suffix) in enumerate(suffixes[1:zone_space_dim])
+        node = get_child(gridCoordinates; name = "Coordinate" * suffix)
+        coords[:, idim] .= flatten_struct_to_unstr(get_value(node))
+    end
+
+    # Resize the `coords` array if necessary
+    _space_dim =
+        usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
+    coords = coords[:, 1:_space_dim]
+
+    # Read all elements
+    if topo_dim == 3
+        c2n = [
+            (
+                ijk2I[i, j, k],
+                ijk2I[i + 1, j, k],
+                ijk2I[i + 1, j + 1, k],
+                ijk2I[i, j + 1, k],
+                ijk2I[i, j, k + 1],
+                ijk2I[i + 1, j, k + 1],
+                ijk2I[i + 1, j + 1, k + 1],
+                ijk2I[i, j + 1, k + 1],
+            ) for (i, j, k) in Iterators.product(tdims_cell...)
+        ]
+        c2t = fill(BCUBE_ENTITY_TO_CGNS_ENTITY[Bcube.Hexa8_t], ncells)
+    elseif topo_dim == 2
+        c2n = [
+            (ijk2I[i, j], ijk2I[i + 1, j], ijk2I[i + 1, j + 1], ijk2I[i, j + 1]) for
+            (i, j) in Iterators.product(tdims_cell...)
+        ]
+        c2t = fill(BCUBE_ENTITY_TO_CGNS_ENTITY[Bcube.Quad4_t], ncells)
+    else
+        error("Structured file with topodim = $(topo_dim) not implemented yet")
+    end
+    c2n = collect(Iterators.flatten(c2n))
+
+    # Read all BCs and then keep only the ones whose topo dim is equal to the base topo dim minus 1
+    bcs = read_zoneBC(zone, nothing, verbose)
+    if !isnothing(bcs)
+        filter!(bc -> (bc.bcdim == topo_dim - 1) || (bc.bcdim == -1), bcs)
+    end
+
+    # Read FlowSolutions
+    fSols = isnothing(varnames) ? nothing : read_solutions(zone, varnames, verbose)
+
+    return (; coords, c2t, c2n, bcs, fSols)
 end
 
 """
@@ -184,9 +263,12 @@ function read_zoneBC(zone, elts, verbose)
 end
 
 """
-Read a BC node.
+    read_bc(bc, elts, verbose)
 
-`elts` is an input corresponding to the zone connectivity "Elements" nodes.
+Read a CGNS BC node.
+
+`elts` is an input corresponding to the zone connectivity "Elements" nodes. For
+an structured zone, this argument is `nothing`
 
 Return a named Tuple (bcname, bcnodes, bcdim) where bcnodes is an array of the nodes
 belonging to this BC.
@@ -397,7 +479,10 @@ function read_solution(zone, fs, varnames)
         # filter to obtain only the desired variables names
         filter!(dArray -> get_name(dArray) in varnames, dArrays)
     end
-    data = Dict(get_name(dArray) => get_value(dArray) for dArray in dArrays)
+    data = Dict(
+        get_name(dArray) => flatten_struct_to_unstr(get_value(dArray)) for
+        dArray in dArrays
+    ) # apply `vec` to handle structured data
 
     # Flow solution name
     name = get_name(fs)
@@ -516,3 +601,5 @@ function _recursive_parse(node, depth, max_depth)
 
     Dict(get_name(child) => _recursive_parse(child, depth + 1, max_depth) for child in node)
 end
+
+flatten_struct_to_unstr(array) = vec(array)
