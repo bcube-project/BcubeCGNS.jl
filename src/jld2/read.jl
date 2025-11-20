@@ -155,11 +155,6 @@ function jld2_read_zone(zone, varnames, topo_dim, space_dim, verbose)
         fSols = nothing
     end
 
-    # @show coords
-    # @show c2t
-    # @show c2n
-    # @show bcs
-    # @show fSols
     return (; coords, c2t, c2n, bcs, fSols)
 end
 

@@ -612,7 +612,6 @@ function build_cgns_string_dtype(length)
     HDF5.API.h5t_set_size(type_id, length)
     HDF5.API.h5t_set_cset(type_id, HDF5.API.H5T_CSET_ASCII)
     dtype = HDF5.Datatype(type_id)
-    # @show d
     return dtype
 end
 

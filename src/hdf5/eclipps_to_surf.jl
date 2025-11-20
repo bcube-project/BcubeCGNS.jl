@@ -61,7 +61,6 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     bc = first(_bcs)
 
     # Build the mapping old -> new nodes number
-    # @show bc.ielts[1] g2l[bc.ielts[1]] c2n[g2l[bc.ielts[1]]]
     old2new_nodes = spzeros(Int, size(coords, 1))
     if read_grid_location_child(bc_node) == "Vertex"
         # TODO : deal with "PointRange"
