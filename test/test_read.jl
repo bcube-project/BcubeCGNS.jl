@@ -1,6 +1,7 @@
 @testset "Read" begin
     @testset "Unstructured" begin
         @testset "CGNS base = 1 2" begin
+            # Lineic CGNS file with cell-centered data
             basename = "naca12-surfBase-unstructured"
 
             # read
@@ -17,28 +18,59 @@
 
         @testset "Eclipps" begin
             @testset "CGNS base = 3 3" begin
-                basename = "naca12-eclipps-unstructured"
+                @testset "NACA0012 ECLIPPS unstructured node-centered" begin
+                    # ECLIPPS unstructured file of a 3D mesh with a NACA0012
+                    # BC data are node-centered
+                    basename = "naca12-eclipps-unstructured"
 
-                # read
-                filepath = joinpath(@__DIR__, "assets", "$(basename).cgns")
-                result = BcubeCGNS.extract_surf_from_eclipps(filepath, "WALL")
-                mesh = result.mesh
-                data = result.data["IcingWallData:Gas"]
+                    # read
+                    filepath = joinpath(@__DIR__, "assets", "$(basename).cgns")
+                    result = BcubeCGNS.extract_surf_from_eclipps(filepath, "WALL")
+                    mesh = result.mesh
+                    data = result.data["IcingWallData:Gas"]
 
-                # interpolate node-centered data on Lagrange P1
-                fs = FunctionSpace(:Lagrange, 1)
-                U = TrialFESpace(fs, mesh)
-                I = invperm(vec(build_node_to_idof(mesh, U)))
-                data = Dict(
-                    key => FEFunction(U, get_values(value)[I]) for (key, value) in data
-                )
+                    # interpolate node-centered data on Lagrange P1
+                    fs = FunctionSpace(:Lagrange, 1)
+                    U = TrialFESpace(fs, mesh)
+                    I = invperm(vec(build_node_to_idof(mesh, U)))
+                    data = Dict(
+                        key => FEFunction(U, get_values(value)[I]) for (key, value) in data
+                    )
 
-                # write
-                filepath = joinpath(tempdir, "$(basename).vtu")
-                write_file(filepath, mesh, data)
+                    # write
+                    filepath = joinpath(tempdir, "$(basename).vtu")
+                    write_file(filepath, mesh, data)
 
-                # test
-                @test fname2sum[basename] == bytes2hex(open(sha1, filepath))
+                    # test
+                    @test fname2sum[basename] == bytes2hex(open(sha1, filepath))
+                end
+
+                @testset "RG-15 ECLIPPS unstructured face-centered" begin
+                    # ECLIPPS unstructured file of a 3D mesh with a RG-15
+                    # BC data are cell-centered
+                    basename = "RG-15-eclipps-unstructured"
+
+                    # read
+                    filepath = joinpath(@__DIR__, "assets", "$(basename).cgns")
+                    result = BcubeCGNS.extract_surf_from_eclipps(filepath, "AEROFOIL")
+                    mesh = result.mesh
+                    data = result.data["IcingWallData:Gas"]
+
+                    # interpolate node-centered data on Lagrange P1
+                    fs = FunctionSpace(:Lagrange, 1)
+                    U = TrialFESpace(fs, mesh)
+                    I = invperm(vec(build_node_to_idof(mesh, U)))
+                    data = Dict(
+                        key => FEFunction(U, get_values(value)[I]) for (key, value) in data
+                    )
+
+                    # write
+                    filepath = joinpath(tempdir, "$(basename).vtu")
+                    write_file(filepath, mesh, data)
+
+                    # test
+                    @test fname2sum[basename] == bytes2hex(open(sha1, filepath))
+                end
             end
         end
     end
