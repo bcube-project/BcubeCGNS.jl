@@ -61,8 +61,16 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     bc = first(_bcs)
 
     # Build the mapping old -> new nodes number
+    # This is necessary because the BC only uses a subset of the Zone nodes,
+    # so we need to identify this subset, and build a new numbering.
     old2new_nodes = spzeros(Int, size(coords, 1))
     if read_grid_location_child(bc_node) == "Vertex"
+        # Note : I encountered some cases where the "PointList" defining
+        # the set of BC nodes is actually not equal to the set of nodes
+        # defined by the "SurfacicElementList".
+        # For now, I still decide to keep these nodes-belonging-to-no-element
+        # in the Mesh.
+
         # TODO : deal with "PointRange"
         new2old_nodes = read_index(get_child(bc_node; name = "PointList"))
     else
@@ -73,8 +81,8 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
         end
         new2old_nodes = findall(node2selected)
     end
-    old2new_nodes[new2old_nodes] .= 1:length(new2old_nodes)
-    n_new = nnz(old2new_nodes)
+    n_new = length(new2old_nodes)
+    old2new_nodes[new2old_nodes] .= 1:n_new
     verbose && println("Number of nodes in extracted surface : $(n_new)")
 
     # Build the new c2n

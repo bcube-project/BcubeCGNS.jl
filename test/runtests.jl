@@ -14,26 +14,29 @@ function custom_include(path)
 end
 
 """
-Only valid for Lagrange
+    lagrange_P1_node_to_idof(mesh)
+
+WARNING : I'm facing situations where there are mesh nodes not belonging to any element.
+So the "node2idof" and "idof2node" are not strictly a permutation.
 """
-function build_node_to_idof(mesh, U)
-    ncomps = Bcube.get_ncomponents(U)
-    node2idof = zeros(Int, nnodes(mesh), ncomps)
-    fs = Bcube.get_function_space(U)
+function lagrange_P1_node_to_idof(mesh)
+    fs = FunctionSpace(:Lagrange, 1)
+    U = TrialFESpace(fs, mesh)
     dhl = Bcube._get_dhl(U)
+    node2idof = zeros(Int, nnodes(mesh))
+    idof2node = zeros(Int, get_ndofs(U))
     for cellInfo in Bcube.DomainIterator(CellDomain(mesh))
         shape = Bcube.shape(Bcube.celltype(cellInfo))
         icell = Bcube.cellindex(cellInfo)
         c2n = Bcube.get_nodes_index(cellInfo)
-        for (ivertex, idofs_l) in enumerate(Bcube.idof_by_vertex(fs, shape))
-            @assert length(idofs_l) == 1
-            for icomp in 1:ncomps
-                node2idof[c2n[ivertex], icomp] =
-                    Bcube.get_dof(dhl, icell, icomp, idofs_l[1]) # there is only one dof per vertex with Lagrange
-            end
+        for (ivertex_l, idofs_l) in enumerate(Bcube.idof_by_vertex(fs, shape))
+            ivertex_g = c2n[ivertex_l]
+            idof_g = Bcube.get_dof(dhl, icell, 1, idofs_l[1]) # there is only one dof per vertex with Lagrange
+            node2idof[ivertex_g] = idof_g
+            idof2node[idof_g] = ivertex_g
         end
     end
-    return node2idof
+    return node2idof, idof2node
 end
 
 # This dir will be removed at the end of the tests
