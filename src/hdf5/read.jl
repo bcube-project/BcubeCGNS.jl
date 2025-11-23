@@ -61,7 +61,14 @@ Read a CGNS Zone node.
 Return a NamedTuple with node coordinates, cell-to-type connectivity (type is a integer),
 cell-to-node connectivity, boundaries (see `read_zoneBC`), and a dictionnary of flow solutions (see `read_solutions`)
 
--> (; coords, c2t, c2n, bcs, fSols)
+-> (; coords, c2t, c2n, c2g, bcs, fSols)
+
+* `coords` is a matrix (nnodes, nspa) of the nodes coordinates
+* `c2t` is the cell-to-type connectivity
+* `c2n` is the cell-to-node connectivity (flattened, this a Vector)
+* `c2g` is the cell-to-globnumber connectity (i-th cell of has the c2g[i] global number in the original numbering)
+* `bcs` the BC
+* `fSols` a dict of FlowSolutions
 
 Note : the `zone_space_dim` is the number of spatial dimension according to the CGNS "Zone" node; whereas
 `usr_space_dim` is the number of spatial dimensions asked by the user (0 to select automatic detection).
@@ -78,9 +85,7 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
     # Read GridCoordinates
     gridCoordinates = get_child(zone; type = "GridCoordinates_t")
     coordXNode = get_child(gridCoordinates; name = "CoordinateX")
-    X = get_value(coordXNode)
-    coords = zeros(eltype(X), nvertices, zone_space_dim)
-    coords[:, 1] .= X
+    coords = zeros(eltype(get_value(coordXNode)), nvertices, zone_space_dim)
     suffixes = ["X", "Y", "Z"]
     for (idim, suffix) in enumerate(suffixes[1:zone_space_dim])
         node = get_child(gridCoordinates; name = "Coordinate" * suffix)
@@ -100,6 +105,7 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
     @assert length(volumicElts) > 0 "Could not find elements of topo dim = $(topo_dim) in the file"
     c2t = mapreduce(elt -> elt.c2t, vcat, volumicElts)
     c2n = mapreduce(elt -> elt.c2n, vcat, volumicElts)
+    c2g = mapreduce(elt -> collect(elt.erange), vcat, volumicElts)
 
     # Read all BCs and then keep only the ones whose topo dim is equal to the base topo dim minus 1
     bcs = read_zoneBC(zone, elts, verbose)
@@ -114,12 +120,7 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
         fSols = nothing
     end
 
-    # @show coords
-    # @show c2t
-    # @show c2n
-    # @show bcs
-    # @show fSols
-    return (; coords, c2t, c2n, bcs, fSols)
+    return (; coords, c2t, c2n, c2g, bcs, fSols)
 end
 
 """
@@ -134,8 +135,8 @@ function read_connectivity(node, reshape = false)
 
     # Build cell to (cgns) type
     code, _ = get_value(node)
-    erange = get_value(get_child(node; name = "ElementRange"))
-    nelts = erange[2] - erange[1] + 1
+    erange = read_index(get_child(node; name = "ElementRange"))
+    nelts = length(erange)
     c2t = fill(code, nelts)
 
     # Build cell to node and reshapce
@@ -144,7 +145,26 @@ function read_connectivity(node, reshape = false)
     nnodes_by_elt = nnodes(cgns_entity_to_bcube_entity(code))
     reshape && (c2n = reshape(c2n, nelts, nnodes_by_elt))
 
-    return (; erange, c2t, c2n, name = get_name(node))
+    return (; erange, c2t, c2n, nelts, name = get_name(node))
+end
+
+"""
+    read_index(node)
+
+Read an element of type "IndexRange_t" (a "PointList" or a "ElementRange" for instance).
+
+Returns an Array (or an iterator) of the global number of the elements.
+"""
+function read_index(node)
+    type = get_cgns_type(node)
+    if type == "IndexRange_t"
+        erange = get_value(node)
+        return erange[1]:erange[2]
+    elseif type == "IndexArray_t"
+        return vec(get_value(node))
+    else
+        error("Reading $type not implemented yet")
+    end
 end
 
 """
@@ -190,10 +210,10 @@ function read_bc(bc, elts, verbose)
             verbose && println("GridLocation is $(bc_type) with IndexRange")
 
             # This is a bit complex because nothing prevents an IndexRange to span over multiples Elements_t
-            erange = get_value(indexRange)
+            erange = read_index(indexRange)
 
             # Allocate the array of node indices corresponding to the BC
-            nelts_bc = erange[2] - erange[1] + 1
+            nelts_bc = length(erange)
             T = eltype(first(elts).c2n[1])
             bcnodes = T[]
             sizehint!(bcnodes, nelts_bc * 4) # we assume 4 nodes by elements
@@ -203,14 +223,15 @@ function read_bc(bc, elts, verbose)
             # Loop over all the Elements_t 'nodes'
             for elt in elts
                 # verbose && println("Searching for elements in Elements_t '$(elt.name)'")
-                i1, i2 = elt.erange
+                i1 = elt.erange[1]
+                i2 = elt.erange[end]
                 etype = cgns_entity_to_bcube_entity(first(elt.c2t))
                 nnodes_by_elt = nnodes(etype)
 
                 if i1 <= erange[1] <= i2
                     # Compute how many nodes are concerned in this Elements_t,
                     # and the offset in the connectivity
-                    nelts_concerned = min(i2, erange[2]) - erange[1] + 1
+                    nelts_concerned = min(i2, erange[end]) - erange[1] + 1
                     nnodes_concerned = nelts_concerned * nnodes_by_elt
                     offset = (erange[1] - i1) * nnodes_by_elt
 
@@ -222,13 +243,13 @@ function read_bc(bc, elts, verbose)
                     bcdim = Bcube.topodim(etype)
 
                     # Check if we've found all the elements in this connectivity
-                    (erange[2] <= i2) && break
+                    (erange[end] <= i2) && break
                 end
 
-                if i1 <= erange[2] <= i2
+                if i1 <= erange[end] <= i2
                     # Compute how many nodes are concerned in this Elements_t,
                     # and the offset in the connectivity
-                    nelts_concerned = erange[2] - max(i1, erange[1]) + 1
+                    nelts_concerned = erange[end] - max(i1, erange[1]) + 1
                     nnodes_concerned = nelts_concerned * nnodes_by_elt
                     offset = (max(i1, erange[1]) - i1) * nnodes_by_elt
 
@@ -250,7 +271,7 @@ function read_bc(bc, elts, verbose)
 
         elseif !isnothing(pointList)
             # Elements indices
-            bc_elts_ind = vec(get_value(pointList))
+            bc_elts_ind = read_index(pointList)
             sort!(bc_elts_ind)
 
             # Allocate the array of node indices corresponding to the BC
@@ -262,7 +283,8 @@ function read_bc(bc, elts, verbose)
             icurr = 1
             for elt in elts
                 verbose && println("Searching for elements in Elements_t '$(elt.name)'")
-                i1, i2 = elt.erange
+                i1 = elt.erange[1]
+                i2 = elt.erange[end]
                 etype = cgns_entity_to_bcube_entity(first(elt.c2t))
                 nnodes_by_elt = nnodes(etype)
 
@@ -294,11 +316,11 @@ function read_bc(bc, elts, verbose)
             error("Could not find either the PointRange nor the PointList")
         end
     elseif bc_type == "Vertex"
+        # todo : I am pretty sure we can remove the "if" here
         if !isnothing(pointList)
-            bcnodes = get_value(pointList)
+            bcnodes = collect(read_index(pointList))
         elseif !isnothing(indexRange)
-            erange = get_value(indexRange)
-            bcnodes = collect(erange[1]:erange[2])
+            bcnodes = collect(read_index(indexRange))
         else
             error("Could not find either the PointRange nor the PointList")
         end
@@ -472,6 +494,8 @@ function read_ref_state(base)
     refState = get_child(base; name = "ReferenceState", type = "ReferenceState_t")
     return isnothing(refState) ? refState : _recursive_parse(refState, 0, 2)
 end
+
+read_grid_location_child(node) = get_value(get_child(node; type = "GridLocation_t"))
 
 function _recursive_parse(node, depth, max_depth)
     # If it's a DataArray, return the value (scalar if necessary)

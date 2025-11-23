@@ -2,6 +2,7 @@ module BcubeCGNS
 using Bcube
 using HDF5
 using JLD2
+using SparseArrays
 
 include("./common.jl")
 
