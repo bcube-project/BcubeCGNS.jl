@@ -33,10 +33,20 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     end
     zone = first(zones)
 
-    # Read zone
-    coords, c2t, c2n, bcs, _ = read_zone(zone, nothing, topodim - 1, spacedim, 0, verbose)
+    # Read zone, but only elements of topology less than 1 compared to the zone dim
+    coords, c2t, c2n, c2g, bcs, _ =
+        read_zone(zone, nothing, topodim - 1, spacedim, 0, verbose)
 
-    # Reshape c2n into a vector of vectors
+    # Create the glob to local numbering. Indeed, we extracted only surfacic elements so c2t[1]
+    # is not (in general) the "element 1" of the CGNS tree. It is only (and even, we could get unlucky)
+    # "the element 1 of surf elements".
+    nc_max = maximum(c2g)
+    g2l = spzeros(Int, nc_max)
+    for (il, ig) in enumerate(c2g)
+        g2l[ig] = il
+    end
+
+    # Reshape c2n into a vector of vectors for convenience
     offsets = cumsum(nnodes.(cgns_entity_to_bcube_entity.(c2t))) .+ 1
     prepend!(offsets, 1)
     c2n = [view(c2n, offsets[i]:(offsets[i + 1] - 1)) for i in 1:length(c2t)]
@@ -45,31 +55,46 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     zoneBC = get_child(zone; type = "ZoneBC_t")
     bcs = get_children(zoneBC; type = "BC_t")
     filter!(z -> get_name(z) in bcnames, bcs)
-    bcs = map(_read_eclipps_bc, bcs)
-    @assert length(bcs) == 1
-    bc = first(bcs)
+    _bcs = map(_read_eclipps_bc, bcs)
+    @assert length(_bcs) == 1 "Wrong number of BC found ($(length(bcs) ))"
+    bc_node = first(bcs)
+    bc = first(_bcs)
 
-    # Identify the subset of required nodes
-    node2selected = zeros(Bool, size(coords, 1))
-    for ielt in bc.ielts
-        node2selected[c2n[ielt]] .= true
+    # Build the mapping old -> new nodes number
+    # This is necessary because the BC only uses a subset of the Zone nodes,
+    # so we need to identify this subset, and build a new numbering.
+    old2new_nodes = spzeros(Int, size(coords, 1))
+    if read_grid_location_child(bc_node) == "Vertex"
+        # Note : I encountered some cases where the "PointList" defining
+        # the set of BC nodes is actually not equal to the set of nodes
+        # defined by the "SurfacicElementList".
+        # For now, I still decide to keep these nodes-belonging-to-no-element
+        # in the Mesh.
+
+        # TODO : deal with "PointRange"
+        new2old_nodes = read_index(get_child(bc_node; name = "PointList"))
+    else
+        # Identify the subset of required nodes
+        node2selected = zeros(Bool, size(coords, 1))
+        for ielt in bc.ielts
+            node2selected[c2n[g2l[ielt]]] .= true
+        end
+        new2old_nodes = findall(node2selected)
     end
-    new2old_nodes = findall(node2selected)
     n_new = length(new2old_nodes)
-    verbose && println("Number of nodes in extracted surface : $(length(new2old_nodes))")
-    old2new_nodes = zeros(Int, size(coords, 1))
     old2new_nodes[new2old_nodes] .= 1:n_new
+    verbose && println("Number of nodes in extracted surface : $(n_new)")
 
     # Build the new c2n
     _c2n = map(bc.ielts) do ielt
-        old2new_nodes[c2n[ielt]]
+        old2new_nodes[c2n[g2l[ielt]]]
     end
     _c2n = reduce(vcat, _c2n)
 
     # Build the Bcube mesh
     new_ZoneBC = (;
         coords = view(coords, new2old_nodes, :),
-        c2t = view(c2t, bc.ielts),
+        c2t = view(c2t, g2l[bc.ielts]),
         c2n = _c2n,
         bcs = nothing,
         fSols = nothing,
@@ -122,7 +147,7 @@ function _read_eclipps_bc(bc)
     filter!(
         bcs ->
             has_child(bcs; name = "DirichletData", type = "BCData_t") ||
-            has_child(bcs; name = "NeumannData", type = "BCData_t"),
+                has_child(bcs; name = "NeumannData", type = "BCData_t"),
         bcDataSets,
     )
     data = map(_read_eclipps_bcdataset, bcDataSets)
