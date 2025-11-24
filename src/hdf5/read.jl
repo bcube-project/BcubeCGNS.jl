@@ -140,13 +140,9 @@ function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_di
     )
 
     # Numbering conversion struct->unstr
-    # tdims = ntuple(l -> 1:nvertices_struct[l], length(nvertices_struct))
-    # ijk2I = LinearIndices(tdims)
     N = length(ncells_struct)
     tdims_cell = ntuple(l -> 1:ncells_struct[l], N)
-    # tdims_cell = ntuple(l -> 1:ncells_struct[N - l + 1], N)
     ijk2I = LinearIndices(Dims(nvertices_struct))
-    @warn "check if vec is the right function to apply to coordinates"
 
     # Read GridCoordinates
     gridCoordinates = get_child(zone; type = "GridCoordinates_t")
