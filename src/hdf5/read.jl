@@ -199,7 +199,7 @@ function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_di
     # Read FlowSolutions
     fSols = isnothing(varnames) ? nothing : read_solutions(zone, varnames, verbose)
 
-    return (; coords, c2t, c2n, bcs, fSols)
+    return (; coords, c2t, c2n, c2g = nothing, bcs, fSols)
 end
 
 """
