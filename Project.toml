@@ -1,15 +1,17 @@
 name = "BcubeCGNS"
 uuid = "a9bead8e-c4b5-4f51-8a4e-84805ae90250"
 authors = ["Maxime Bouyges <maxime.bouyges@gmail.com>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 Bcube = "cf06320b-b7f3-4748-8003-81a6b6979792"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-Bcube = "0.3"
+Bcube = "0.3.2"
 HDF5 = "0.17"
 JLD2 = "0.5"
+SparseArrays = "1.11.0"
 julia = "1.8"
