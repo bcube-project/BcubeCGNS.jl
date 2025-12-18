@@ -193,8 +193,7 @@ belonging to this BC.
 """
 function read_bc(bc, elts, verbose)
     # BC name
-    familyName = get_child(bc; type = "FamilyName_t")
-    bcname = isnothing(familyName) ? get_name(bc) : get_value(familyName)
+    bcname = get_name(bc)
     verbose && println("Reading BC '$bcname'")
 
     # BC connectivity
