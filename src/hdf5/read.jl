@@ -271,6 +271,8 @@ function read_bc(bc, elts, verbose)
         elseif !isnothing(pointList)
             # Elements indices
             bc_elts_ind = read_index(pointList)
+
+            # Sort the elements of the PointList (here, faces indices) by increasing order
             sort!(bc_elts_ind)
 
             # Allocate the array of node indices corresponding to the BC
@@ -287,17 +289,25 @@ function read_bc(bc, elts, verbose)
                 etype = cgns_entity_to_bcube_entity(first(elt.c2t))
                 nnodes_by_elt = nnodes(etype)
 
+                # Check if this Elements_t has at least one element of the BC
                 (bc_elts_ind[icurr] < i1) && continue
                 (bc_elts_ind[icurr] > i2) && continue
 
-                if bc_elts_ind[end] <= i2
-                    iEnd = bc_elts_ind[end]
-                else
-                    iEnd = findfirst(i -> i > i2, view(bc_elts_ind, icurr:nelts_bc)) - 1
+                # Loop over the element of the list (warning : they may be not contiguous!)
+                nelts_found = 0
+                keep_going = true
+                while icurr <= length(bc_elts_ind)
+                    if i1 <= bc_elts_ind[icurr] <= i2
+                        ielt_glob = bc_elts_ind[icurr]
+                        offset = (ielt_glob - i1) * nnodes_by_elt
+                        push!(bcnodes, elt.c2n[(1 + offset):(offset + nnodes_by_elt)]...)
+                        nelts_found += 1
+                        icurr += 1
+                    else
+                        break
+                    end
                 end
-                offset = (bc_elts_ind[icurr] - i1) * nnodes_by_elt
-                push!(bcnodes, elt.c2n[(1 + offset):(nnodes_by_elt * (iEnd - i1 + 1))]...)
-                icurr = iEnd + 1
+                verbose && println("$(nelts_found) elements found in '$(elt.name)'")
 
                 (icurr > nelts_bc) && break
 
@@ -314,6 +324,10 @@ function read_bc(bc, elts, verbose)
         else
             error("Could not find either the PointRange nor the PointList")
         end
+
+        # Remove duplicated nodes
+        unique!(bcnodes)
+        
     elseif bc_type == "Vertex"
         # todo : I am pretty sure we can remove the "if" here
         if !isnothing(pointList)
