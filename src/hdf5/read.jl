@@ -204,7 +204,7 @@ function read_bc(bc, elts, verbose)
     # BC topodim : it's not always possible to determine it, so it's negative by default
     bcdim = -1
 
-    if bc_type in ["CellCenter", "FaceCenter"]
+    if bc_type in ["CellCenter", "FaceCenter", "EdgeCenter"]
         if !isnothing(indexRange)
             verbose && println("GridLocation is $(bc_type) with IndexRange")
 
@@ -327,7 +327,7 @@ function read_bc(bc, elts, verbose)
 
         # Remove duplicated nodes
         unique!(bcnodes)
-        
+
     elseif bc_type == "Vertex"
         # todo : I am pretty sure we can remove the "if" here
         if !isnothing(pointList)
