@@ -1,0 +1,3 @@
+[HDF5]
+libhdf5 = "/opt/tools/hdf5/1.14.3-gnu850-ompi502-hpc/lib/libhdf5.so"
+libhdf5_hl = "/opt/tools/hdf5/1.14.3-gnu850-ompi502-hpc/lib/libhdf5_hl.so"
