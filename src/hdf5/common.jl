@@ -14,9 +14,11 @@ end
 
 get_name(obj) = String(last(split(HDF5.name(obj), '/')))
 
-get_data_type(obj) = attributes(obj)["type"][]
+get_data_type(obj) = read(attributes(obj)["type"])
 
-get_cgns_type(obj) = haskey(attributes(obj), "label") ? attributes(obj)["label"][] : nothing
+function get_cgns_type(obj)
+    haskey(attributes(obj), "label") ? read(attributes(obj)["label"]) : nothing
+end
 
 function get_value(obj)
     data_type = get_data_type(obj)
