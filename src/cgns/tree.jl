@@ -27,6 +27,8 @@ function CGNSNode(name::String, value, children, label::String)
     return CGNSNode{_label, typeof(value), typeof(children)}(name, value, children)
 end
 
+# Note : I'm not sure the @enum is the good solution. Maybe an `AbstractCGNSLabel` and several `struct`
+# would be better?
 @enum CGNSLabel begin
     AdditionalExponents_t
     AdditionalFamilyName_t

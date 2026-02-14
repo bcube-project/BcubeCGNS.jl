@@ -24,6 +24,7 @@ include("./jld2/write.jl")
 include("./hdf5/eclipps_to_surf.jl")
 
 # (Bcube) CGNS Mesh
-include("./mesh/cgns-mesh.jl")
+include("./mesh/mesh.jl")
+include("./mesh/domain.jl")
 
 end
