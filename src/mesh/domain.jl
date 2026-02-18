@@ -43,8 +43,8 @@ function CGNSSubDomain(eltNode::CGNSNode{Elements_t}, selection, l2g)
     mat = reshape(_cell2nodes, nnodes_by_elt, nelts)'
 
     # Build Bcube connectivity from selection
-    cell2nnodes = fill(nnodes_by_elt, length(selection))
-    cell2nodes = vec(mat[selection, :]') # flatten
+    cell2nodes = Array(vec(mat[selection, :]')) # flatten
+    cell2nnodes = fill(eltype(cell2nodes)(nnodes_by_elt), length(selection))
     c2n = Bcube.Connectivity(cell2nnodes, cell2nodes)
 
     # Build MeshConnectivities
