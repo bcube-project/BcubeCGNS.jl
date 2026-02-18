@@ -11,11 +11,10 @@ Warning : for now it is limited to only one BC because Bcube doesn't support mul
 """
 function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     # Open the file
-    file = h5open(filepath, "r")
-    root = file
+    tree = h5open(CGNS.hdf5_to_node, filepath, "r")
 
     # Read (unique) CGNS base
-    cgnsBase = get_cgns_base(root)
+    cgnsBase = get_cgns_base(tree)
 
     # Reference state
     refState = read_ref_state(cgnsBase)
@@ -25,7 +24,7 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     verbose && println("topodim = $topodim, spacedim = $(spacedim)")
 
     # Find the list of Zone_t
-    zones = get_children(cgnsBase; type = "Zone_t")
+    zones = get_children(cgnsBase; label = CGNS.Zone_t)
     if length(zones) == 0
         error("Could not find any Zone_t node in the file")
     elseif length(zones) > 1
@@ -52,8 +51,8 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     c2n = [view(c2n, offsets[i]:(offsets[i + 1] - 1)) for i in 1:length(c2t)]
 
     # Read ZoneBC and filter the ones we are interested in
-    zoneBC = get_child(zone; type = "ZoneBC_t")
-    bcs = get_children(zoneBC; type = "BC_t")
+    zoneBC = get_child(zone; label = CGNS.ZoneBC_t)
+    bcs = get_children(zoneBC; label = CGNS.BC_t)
     filter!(z -> get_name(z) in bcnames, bcs)
     _bcs = map(_read_eclipps_bc, bcs)
     @assert length(_bcs) == 1 "Wrong number of BC found ($(length(bcs) ))"
@@ -117,9 +116,6 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
         end for (name, array) in d) for (fname, d) in _data
     )
 
-    # Close the file
-    close(file)
-
     return (; mesh, data, refState)
 end
 function extract_surf_from_eclipps(filepath::String, bcname::String; kwargs...)
@@ -138,18 +134,16 @@ function _read_eclipps_bc(bc)
             get_child(
                 get_child(bc; name = "SurfacicElementList");
                 name = "List",
-                type = "DataArray_t",
+                label = CGNS.DataArray_t,
             ),
         ),
     )
 
-    bcDataSets = get_children(bc; type = "BCDataSet_t")
-    filter!(
-        bcs ->
-            has_child(bcs; name = "DirichletData", type = "BCData_t") ||
-            has_child(bcs; name = "NeumannData", type = "BCData_t"),
-        bcDataSets,
-    )
+    bcDataSets = get_children(bc; label = CGNS.BCDataSet_t)
+    function f(n)
+        (get_name(n) ∈ ("DirichletData", "NeumannData")) && (get_label(n) == CGNS.BCData_t)
+    end
+    filter!(bcs -> has_child(bcs, f), bcDataSets)
     data = map(_read_eclipps_bcdataset, bcDataSets)
 
     return (; bcname = get_name(bc), ielts, data)
@@ -160,20 +154,20 @@ Return a NamedTuple with two entries : "dirichlet" and "neumann". For
 each entry, a vector of (name,value) for each "data" (ex: temperature)
 """
 function _read_eclipps_bcdataset(bcs)
-    bcData = get_child(bcs; name = "DirichletData", type = "BCData_t")
-    dirichlet = if isnothing(bcData) || !has_child(bcData; type = "DataArray_t")
+    bcData = get_child(bcs; name = "DirichletData", label = CGNS.BCData_t)
+    dirichlet = if isnothing(bcData) || !has_child(bcData; label = CGNS.DataArray_t)
         nothing
     else
-        map(get_children(bcData; type = "DataArray_t")) do data
+        map(get_children(bcData; label = CGNS.DataArray_t)) do data
             (name = get_name(data), value = get_value(data))
         end
     end
 
-    bcData = get_child(bcs; name = "NeumannData", type = "BCData_t")
-    neumann = if isnothing(bcData) || !has_child(bcData; type = "DataArray_t")
+    bcData = get_child(bcs; name = "NeumannData", label = CGNS.BCData_t)
+    neumann = if isnothing(bcData) || !has_child(bcData; label = CGNS.DataArray_t)
         nothing
     else
-        map(get_children(bcData; type = "DataArray_t")) do data
+        map(get_children(bcData; label = CGNS.DataArray_t)) do data
             (name = get_name(data), value = get_value(data))
         end
     end

@@ -19,7 +19,7 @@ function hdf5_to_node(g)
     name = read(attrs["name"])
     label = read(attrs["label"])
 
-    data = haskey(g, " data") ? read(g[" data"]) : nothing
+    data = read_data(g)
 
     cgnsChildrenNames = findall(is_cgns_node, g)
     children = if length(cgnsChildrenNames) > 0
@@ -28,7 +28,27 @@ function hdf5_to_node(g)
         CGNSNode{Empty, Nothing, Nothing}[]
     end
 
+    # Root node get a special treatment
+    if HDF5.name(g) == "/"
+        name = "CGNSTree"
+        label = CGNS.enum_to_string(CGNS.CGNSTree_t)
+    end
     return CGNSNode(name, data, children, label)
+end
+
+function read_data(obj)
+    haskey(obj, " data") || return nothing
+    data_type = read(attributes(obj)["type"])
+    data = read(obj[" data"])
+    if (data_type == "C1") && (data isa AbstractVector)
+        return String(UInt8.(data))
+    elseif (data_type == "C1") && (data isa AbstractMatrix)
+        return map(col -> String(UInt8.(col)), eachcol(data))
+    elseif data_type in ("I4", "I8", "R4", "R8")
+        return data
+    else
+        error("Datatype '$(data_type)' not handled")
+    end
 end
 
 """ WARNING : this is not a CGNS compliant file yet, it's only for debug """
