@@ -42,13 +42,36 @@ function read_data(obj)
     data = read(obj[" data"])
     if (data_type == "C1") && (data isa AbstractVector)
         return String(UInt8.(data))
-    elseif (data_type == "C1") && (data isa AbstractMatrix)
-        return map(col -> String(UInt8.(col)), eachcol(data))
+    elseif (data_type == "C1") && (data isa AbstractArray)
+        x = extract_strings(data)
+        return x
     elseif data_type in ("I4", "I8", "R4", "R8")
         return data
     else
-        error("Datatype '$(data_type)' not handled")
+        error("Datatype '$(data_type)' with shape '$(typeof(data))' not handled")
     end
+end
+
+function extract_strings(array)
+    dims = size(array)
+    tail_dims = dims[2:end]
+    result = Array{String}(undef, tail_dims...)
+
+    for I in CartesianIndices(tail_dims)
+        full_index = (Colon(), Tuple(I)...)
+        bytes = UInt8.(array[full_index...])
+
+        # Find first 0x00
+        pos = findfirst(==(0x00), bytes)
+
+        if pos === nothing
+            result[I] = String(bytes)
+        else
+            result[I] = String(@view bytes[1:(pos - 1)])
+        end
+    end
+
+    return result
 end
 
 """ WARNING : this is not a CGNS compliant file yet, it's only for debug """

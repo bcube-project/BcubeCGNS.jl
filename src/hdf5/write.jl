@@ -63,10 +63,10 @@ function append_to_cgns_file(
     @assert !update_mesh "Mesh update not implemented yet"
 
     # Read (unique) CGNS base
-    cgnsBase = get_cgns_base(file)
+    cgnsBase = get_hdf5_cgns_base(file)
 
     # Find the list of Zone_t
-    zones = get_children(cgnsBase; type = "Zone_t")
+    zones = get_hdf5_children(cgnsBase; type = "Zone_t")
     if length(zones) == 0
         error("Could not find any Zone_t node in the file")
     elseif length(zones) > 1
@@ -76,7 +76,7 @@ function append_to_cgns_file(
 
     # If it >= 0, update/create BaseIterativeData
     if it >= 0 && !skip_iterative_data
-        append_to_base_iterative_data(cgnsBase, get_name(zone), it, time)
+        append_to_base_iterative_data(cgnsBase, get_hdf5_name(zone), it, time; verbose)
     else
         verbose &&
             println("Skipping BaseIterativeData because iteration < 0 or asked to skip it")
@@ -179,7 +179,7 @@ function create_cgns_file(
     # Base and zone iterative data
     if it >= 0 && !skip_iterative_data
         verbose && println("Creating BaseIterativeData and ZoneIterativeData")
-        create_cgns_base_iterative_data(cgnsBase, get_name(zone), it, time)
+        create_cgns_base_iterative_data(cgnsBase, get_hdf5_name(zone), it, time)
         create_cgns_zone_iterative_data(zone, it; verbose)
     end
 end
@@ -362,7 +362,7 @@ function create_flow_solution(zone, data, fname, isVertex, projection, append; v
     # Try to get an existing node. If it exists and append=true,
     # an error is raised.
     # Otherwise, a new node is created.
-    fnode = get_child(zone; name = fname, type = "FlowSolution_t")
+    fnode = get_hdf5_child(zone; name = fname, type = "FlowSolution_t")
     if !isnothing(fnode) && !append
         error("The node '$fname' already exists")
     else
@@ -455,8 +455,8 @@ end
 * CGNS also allows for a "TimeDurations" node instead of "IterationValues"
 * a unique zone is assumed
 """
-function append_to_base_iterative_data(cgnsBase, zonename, it, time)
-    bid = get_child(cgnsBase; type = "BaseIterativeData_t")
+function append_to_base_iterative_data(cgnsBase, zonename, it, time; verbose)
+    bid = get_hdf5_child(cgnsBase; type = "BaseIterativeData_t")
 
     # Check if node exists, if not -> create it
     if isnothing(bid)
@@ -468,9 +468,9 @@ function append_to_base_iterative_data(cgnsBase, zonename, it, time)
     # BaseIterativeData. If it is the case, we don't do anything.
     # Note that in the maia example, the node IterationValues does not exist,
     # hence we skip this part if the node is not found.
-    iterationValues = get_child(bid; name = "IterationValues")
+    iterationValues = get_hdf5_child(bid; name = "IterationValues")
     if !isnothing(iterationValues)
-        iterations = get_value(iterationValues)
+        iterations = get_hdf5_value(iterationValues)
         (it ∈ iterations) && return
 
         # Append iteration to the list of iteration values
@@ -481,17 +481,17 @@ function append_to_base_iterative_data(cgnsBase, zonename, it, time)
         update_cgns_data(bid, length(iterations))
     end
 
-    numberOfZones = get_child(bid; name = "NumberOfZones")
-    data = get_value(numberOfZones)
+    numberOfZones = get_hdf5_child(bid; name = "NumberOfZones")
+    data = get_hdf5_value(numberOfZones)
     nsteps = length(data)
     push!(data, 1)
     update_cgns_data(numberOfZones, data)
 
-    timeValues = get_child(bid; name = "TimeValues")
-    data = push!(get_value(timeValues), time)
+    timeValues = get_hdf5_child(bid; name = "TimeValues")
+    data = push!(get_hdf5_value(timeValues), time)
     update_cgns_data(timeValues, data)
 
-    zonePointers = get_child(bid; name = "ZonePointers")
+    zonePointers = get_hdf5_child(bid; name = "ZonePointers")
     data = read(zonePointers[" data"])
     new_data = zeros(eltype(data), (32, 1, nsteps + 1))
     str = str2int8_with_fixed_length(zonename, 32)
@@ -508,8 +508,8 @@ Call to this function must be performed AFTER the FlowSolution creation
 function create_cgns_zone_iterative_data(zone, it; verbose)
     # Find the FlowSolution name that matches the iteration
     fsname = "NotFound"
-    for fs in get_children(zone; type = "FlowSolution_t")
-        _fsname = get_name(fs)
+    for fs in get_hdf5_children(zone; type = "FlowSolution_t")
+        _fsname = get_hdf5_name(fs)
         if endswith(_fsname, iteration_to_string(it))
             fsname = _fsname
             break
@@ -540,8 +540,8 @@ CGNS does seem to allow multiple FlowSolution nodes for one time step in a Zone.
 function append_to_zone_iterative_data(zone, it; verbose)
     # Find the FlowSolution name that matches the iteration
     fsname = "NotFound"
-    for fs in get_children(zone; type = "FlowSolution_t")
-        _fsname = get_name(fs)
+    for fs in get_hdf5_children(zone; type = "FlowSolution_t")
+        _fsname = get_hdf5_name(fs)
         if endswith(_fsname, iteration_to_string(it))
             fsname = _fsname
             break
@@ -550,11 +550,11 @@ function append_to_zone_iterative_data(zone, it; verbose)
     verbose && println("Attaching iteration $it to FlowSolution '$fsname'")
 
     # Get ZoneIterativeData node (or create it)
-    zid = get_child(zone; type = "ZoneIterativeData_t")
-    isnothing(zid) && (return create_cgns_zone_iterative_data(zone, it))
+    zid = get_hdf5_child(zone; type = "ZoneIterativeData_t")
+    isnothing(zid) && (return create_cgns_zone_iterative_data(zone, it; verbose))
 
     # Append to FlowSolutionPointers
-    fsPointers = get_child(zid; name = "FlowSolutionPointers")
+    fsPointers = get_hdf5_child(zid; name = "FlowSolutionPointers")
     data = read(fsPointers[" data"])
     n = size(data, 2)
     new_data = zeros(eltype(data), (32, n + 1))
@@ -575,6 +575,66 @@ end
 function update_cgns_data(obj, data)
     delete_object(obj, " data")
     append_cgns_data(obj, data)
+end
+
+function get_hdf5_label(obj)
+    haskey(attributes(obj), "label") ? read(attributes(obj)["label"]) : nothing
+end
+
+get_hdf5_name(obj) = String(last(split(HDF5.name(obj), '/')))
+
+get_hdf5_type(obj) = read(attributes(obj)["type"])
+
+function get_hdf5_value(obj)
+    data_type = get_hdf5_type(obj)
+    data = read(obj[" data"])
+    if data_type == "C1"
+        return String(UInt8.(data))
+    elseif data_type in ("I4", "I8", "R4", "R8")
+        return data
+    else
+        error("Datatype '$(data_type)' not handled")
+    end
+end
+
+function child_match(child, name, type)
+    if get_hdf5_name(child) == name
+        if length(name) > 0 && length(type) > 0
+            (get_hdf5_label(child) == type) && (return true)
+        elseif length(name) > 0
+            return true
+        end
+    end
+
+    if get_hdf5_label(child) == type
+        if length(name) > 0 && length(type) > 0
+            (get_hdf5_name(child) == name) && (return true)
+        elseif length(type) > 0
+            return true
+        end
+    end
+
+    return false
+end
+
+function get_hdf5_child(parent; name = "", type = "")
+    child_name = findfirst(child -> child_match(child, name, type), parent)
+    return isnothing(child_name) ? nothing : parent[child_name]
+end
+
+function get_hdf5_children(parent; name = "", type = "")
+    child_names = findall(child -> child_match(child, name, type), parent)
+    return map(child_name -> parent[child_name], child_names)
+end
+
+function get_hdf5_cgns_base(obj)
+    cgnsBases = get_hdf5_children(obj; type = "CGNSBase_t")
+    if length(cgnsBases) == 0
+        error("Could not find any CGNSBase_t node in the file")
+    elseif length(cgnsBases) > 1
+        error("The file contains several CGNSBase_t nodes, only one base is supported")
+    end
+    return first(cgnsBases)
 end
 
 function set_cgns_attr!(obj, name, label, type)
