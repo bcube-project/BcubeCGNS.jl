@@ -1,6 +1,6 @@
 name = "BcubeCGNS"
 uuid = "a9bead8e-c4b5-4f51-8a4e-84805ae90250"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Maxime Bouyges <maxime.bouyges@gmail.com>"]
 
 [deps]
@@ -10,7 +10,7 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-Bcube = "0.3.2, 0.4"
+Bcube = "0.4"
 HDF5 = "0.17"
 JLD2 = "0.5"
 SparseArrays = "1.8"
