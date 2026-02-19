@@ -25,26 +25,6 @@ end
 
 cgns_entity_to_bcube_entity(code::Integer) = CGNS_ENTITY_TO_BCUBE_ENTITY[code]()
 
-function child_match(child, name, type)
-    if get_name(child) == name
-        if length(name) > 0 && length(type) > 0
-            (get_cgns_type(child) == type) && (return true)
-        elseif length(name) > 0
-            return true
-        end
-    end
-
-    if get_cgns_type(child) == type
-        if length(name) > 0 && length(type) > 0
-            (get_name(child) == name) && (return true)
-        elseif length(type) > 0
-            return true
-        end
-    end
-
-    return false
-end
-
 function is_volumic_entity(code::Integer, topo_dim)
     Bcube.topodim(cgns_entity_to_bcube_entity(code)) == topo_dim
 end

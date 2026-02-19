@@ -26,5 +26,6 @@ fname2sum = Dict(r[2] => r[1] for r in eachrow(f))
 
 @testset "BcubeGmsh.jl" begin
     custom_include("./test_read.jl")
+    custom_include("./test_write.jl")
     custom_include("./test_cgns_mesh.jl")
 end
