@@ -218,7 +218,7 @@ function set_cgns_root!(root)
         @warn "Could not determine float type, assuming IEEE_LITTLE_32"
         format = "IEEE_LITTLE_32"
     end
-    root[" format"] = str2int8(format)
+    root[" format"] = str2int8_with_fixed_length(format, 33)
 end
 
 function create_cgns_elements(mesh, zone; write_bnd_faces = false, verbose = false)
