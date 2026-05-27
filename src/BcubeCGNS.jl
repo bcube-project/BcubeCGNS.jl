@@ -9,7 +9,8 @@ include("./common.jl")
 # CGNS tree
 include("./cgns/CGNS.jl")
 using .CGNS
-import .CGNS: get_child, get_value, get_children, get_name, has_child
+import .CGNS:
+    get_child, get_value, get_children, get_name, has_child, get_child_from_name_and_label
 
 # HDF5 reader/writer
 include("./hdf5/common.jl")

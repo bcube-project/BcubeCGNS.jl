@@ -48,6 +48,10 @@ function get_node_from_predicate(root, condition; kwargs...)
     first(get_nodes_from_predicate(root, condition; nmax = 1, kwargs...))
 end
 
+function get_node_from_label(root, label; kwargs...)
+    first(get_nodes_from_label(root, label; nmax = 1, kwargs...))
+end
+
 function get_node_from_name_and_label(root, name, label; kwargs...)
     first(get_nodes_from_name_and_label(root, name, label; nmax = 1, kwargs...))
 end
