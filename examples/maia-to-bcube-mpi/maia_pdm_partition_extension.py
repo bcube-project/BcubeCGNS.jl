@@ -273,9 +273,21 @@ def append_extension_to_tree_3d(zone, data_ext, data_total, cell_to_rank = None)
     MT.new_GlobalNumbering(gnum, parent = elt_node)
 
     # Fix Zone infos
-    PT.set_value(zone, [[len(x), len(total_cell_ln_to_gn), 0]])
+    n_vtx_total = len(x)
+    n_cell_total = len(total_cell_ln_to_gn)
+    PT.set_value(zone, [[n_vtx_total, n_cell_total, 0]])
     PT.set_value(MT.get_GlobalNumbering(zone, 'Vertex'), data_total['vtx_ln_to_gn'])
     PT.set_value(MT.get_GlobalNumbering(zone, 'Cell'), total_cell_ln_to_gn)
+
+    # Fix FlowSolution (increase size and place zeros)
+    for fs in PT.get_children_from_label(zone, "FlowSolution_t"):
+        gl = PT.Container.GridLocation(fs)
+        new_length = n_vtx_total if gl == "Vertex" else n_cell_total
+        for darray in PT.get_children_from_label(fs, "DataArray_t"):
+            val = PT.get_value(darray)
+            new_val = np.zeros(new_length, dtype = val.dtype)
+            new_val[0:len(val)] = val
+            PT.set_value(darray, new_val)
 
 
 def append_extension_to_tree_2d(zone, data_ext, data_total):
