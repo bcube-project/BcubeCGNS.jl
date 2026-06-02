@@ -8,8 +8,9 @@ function Bcube.read_file(
     verbose = false,
     kwargs...,
 )
-    return h5open(CGNS.hdf5_to_node, filepath, "r") do tree
-        read_tree(tree; domains, varnames, topodim, spacedim, verbose, kwargs...)
+    return h5open(filepath, "r") do file
+        tree = CGNS.hdf5_to_node(file)
+        return read_tree(tree; domains, varnames, topodim, spacedim, verbose, kwargs...)
     end
 end
 
