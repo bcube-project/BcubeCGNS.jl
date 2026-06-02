@@ -33,15 +33,15 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     zone = first(zones)
 
     # Read zone, but only elements of topology less than 1 compared to the zone dim
-    coords, c2t, c2n, c2g, bcs, _ =
+    @unpack coords, c2t, c2n, cell_ln_to_gn, bcs =
         read_zone(zone, nothing, topodim - 1, spacedim, 0, verbose)
 
     # Create the glob to local numbering. Indeed, we extracted only surfacic elements so c2t[1]
     # is not (in general) the "element 1" of the CGNS tree. It is only (and even, we could get unlucky)
     # "the element 1 of surf elements".
-    nc_max = maximum(c2g)
+    nc_max = maximum(cell_ln_to_gn)
     g2l = spzeros(Int, nc_max)
-    for (il, ig) in enumerate(c2g)
+    for (il, ig) in enumerate(cell_ln_to_gn)
         g2l[ig] = il
     end
 
@@ -91,12 +91,15 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     _c2n = reduce(vcat, _c2n)
 
     # Build the Bcube mesh
+    verbose && (@warn "Setting artificial local to global numbering")
     new_ZoneBC = (;
         coords = view(coords, new2old_nodes, :),
         c2t = view(c2t, g2l[bc.ielts]),
         c2n = _c2n,
         bcs = nothing,
         fSols = nothing,
+        vtx_ln_to_gn = 1:n_new,
+        cell_ln_to_gn = 1:length(bc.ielts),
     )
     mesh = cgns_mesh_to_bcube_mesh(new_ZoneBC)
 
