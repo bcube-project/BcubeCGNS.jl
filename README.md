@@ -19,3 +19,12 @@ result = read_file("output.cgns"; varnames = "*")
 mesh = result.mesh
 data = result.data # Dict of variable name (String) to MeshData
 ```
+
+## Development instructions
+
+To run the tests, `git lfs` must be present on your system, and you must `fetch` the concerned files:
+```bash
+git checkout foo
+git lfs install
+git lfs pull
+```
