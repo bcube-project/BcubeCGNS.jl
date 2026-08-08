@@ -8,14 +8,25 @@ function Bcube.read_file(
     verbose = false,
     kwargs...,
 )
+    return h5open(filepath, "r") do file
+        tree = CGNS.hdf5_to_node(file)
+        return read_tree(tree; domains, varnames, topodim, spacedim, verbose, kwargs...)
+    end
+end
+
+function read_tree(
+    tree;
+    domains = String[],
+    varnames = nothing,
+    topodim = 0,
+    spacedim = 0,
+    verbose = false,
+    kwargs...,
+)
     @assert length(domains) == 0 "Reading only some domains is not supported yet (but easy to implement)"
 
-    # Open the file
-    file = h5open(filepath, "r")
-    root = file
-
     # Read (unique) CGNS base
-    cgnsBase = get_cgns_base(root)
+    cgnsBase = get_cgns_base(tree)
 
     # Reference state
     refState = read_ref_state(cgnsBase)
@@ -27,7 +38,7 @@ function Bcube.read_file(
     verbose && println("topodim = $topodim, spacedim = $(zone_space_dim)")
 
     # Find the list of Zone_t
-    zones = get_children(cgnsBase; type = "Zone_t")
+    zones = get_children(cgnsBase; label = CGNS.Zone_t)
     if length(zones) == 0
         error("Could not find any Zone_t node in the file")
     elseif length(zones) > 1
@@ -37,9 +48,6 @@ function Bcube.read_file(
 
     # Read zone
     zoneCGNS = read_zone(zone, varnames, topodim, zone_space_dim, spacedim, verbose)
-
-    # Close the file
-    close(file)
 
     # Build Bcube Mesh
     mesh = cgns_mesh_to_bcube_mesh(zoneCGNS)
@@ -56,18 +64,20 @@ function Bcube.read_file(
 end
 
 """
+    read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
+
 Read a CGNS Zone node.
 
 Return a NamedTuple with node coordinates, cell-to-type connectivity (type is a integer),
 cell-to-node connectivity, boundaries (see `read_zoneBC`), and a dictionnary of flow solutions (see `read_solutions`)
 
--> (; coords, c2t, c2n, c2g, bcs, fSols)
+-> (; coords, c2t, c2n, cell_ln_to_gn, bcs, fSols)
 
 * `coords` is a matrix (nnodes, nspa) of the nodes coordinates
 * `c2t` is the cell-to-type connectivity
 * `c2n` is the cell-to-node connectivity (flattened, this a Vector)
-* `c2g` is the cell-to-globnumber connectity (i-th cell of has the c2g[i] global number in the original numbering)
-* `bcs` the BC
+* `cell_ln_to_gn` is the cell-to-globnumber connectivity (i-th cell of has the cell_ln_to_gn[i] global number in the original numbering)
+* `bcs` the BCs (see `read_bc`)
 * `fSols` a dict of FlowSolutions
 
 Note : the `zone_space_dim` is the number of spatial dimension according to the CGNS "Zone" node; whereas
@@ -75,7 +85,9 @@ Note : the `zone_space_dim` is the number of spatial dimension according to the 
 """
 function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
     # Preliminary check
-    zoneType = get_value(get_child(zone; type = "ZoneType_t"))
+    zoneTypeNode = get_child(zone; label = CGNS.ZoneType_t)
+    @assert !isnothing(zoneTypeNode) "Could not determine zone type, missing ZoneType_t node?"
+    zoneType = parse_to_string(get_value(zoneTypeNode))
     @assert zoneType == "Unstructured" "Only unstructured zone are supported"
 
     # Number of elements
@@ -83,7 +95,7 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
     verbose && println("nvertices = $nvertices, ncells = $ncells")
 
     # Read GridCoordinates
-    gridCoordinates = get_child(zone; type = "GridCoordinates_t")
+    gridCoordinates = get_child(zone; label = CGNS.GridCoordinates_t)
     coordXNode = get_child(gridCoordinates; name = "CoordinateX")
     coords = zeros(eltype(get_value(coordXNode)), nvertices, zone_space_dim)
     suffixes = ["X", "Y", "Z"]
@@ -98,14 +110,28 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
     coords = coords[:, 1:_space_dim]
 
     # Read all elements
-    elts = map(read_connectivity, get_children(zone; type = "Elements_t"))
+    elts = map(read_connectivity, get_children(zone; label = CGNS.Elements_t))
 
     # Filter "volumic" elements to build the volumic connectivities arrays
     volumicElts = filter(elt -> is_volumic_entity(first(elt.c2t), topo_dim), elts)
     @assert length(volumicElts) > 0 "Could not find elements of topo dim = $(topo_dim) in the file"
     c2t = mapreduce(elt -> elt.c2t, vcat, volumicElts)
     c2n = mapreduce(elt -> elt.c2n, vcat, volumicElts)
-    c2g = mapreduce(elt -> collect(elt.erange), vcat, volumicElts)
+
+    # Read absolute indices : if a maia-node is found, we select it. Otherwise, we use the "erange"
+    maia_gnum =
+        get_child_from_name_and_label(zone, ":CGNS#GlobalNumbering", CGNS.UserDefinedData_t)
+    if isnothing(maia_gnum)
+        vtx_ln_to_gn = 1:nvertices
+        cell_ln_to_gn = mapreduce(elt -> collect(elt.erange), vcat, volumicElts)
+        verbose && println("Default global numbering set")
+    else
+        vtx_ln_to_gn =
+            get_value(get_child_from_name_and_label(maia_gnum, "Vertex", CGNS.DataArray_t))
+        cell_ln_to_gn =
+            get_value(get_child_from_name_and_label(maia_gnum, "Cell", CGNS.DataArray_t))
+        verbose && println("Maia global numbering set")
+    end
 
     # Read all BCs and then keep only the ones whose topo dim is equal to the base topo dim minus 1
     bcs = read_zoneBC(zone, elts, verbose)
@@ -120,7 +146,7 @@ function read_zone(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verb
         fSols = nothing
     end
 
-    return (; coords, c2t, c2n, c2g, bcs, fSols)
+    return (; coords, c2t, c2n, bcs, fSols, vtx_ln_to_gn, cell_ln_to_gn)
 end
 
 """
@@ -131,7 +157,7 @@ Read an "Elements_t" node and returns a named Tuple of three elements:
 * `name`, only for dbg
 """
 function read_connectivity(node, reshape = false)
-    @assert get_cgns_type(node) == "Elements_t"
+    @assert get_label(node) == CGNS.Elements_t
 
     # Build cell to (cgns) type
     code, _ = get_value(node)
@@ -156,11 +182,11 @@ Read an element of type "IndexRange_t" (a "PointList" or a "ElementRange" for in
 Returns an Array (or an iterator) of the global number of the elements.
 """
 function read_index(node)
-    type = get_cgns_type(node)
-    if type == "IndexRange_t"
+    type = get_label(node)
+    if type == CGNS.IndexRange_t
         erange = get_value(node)
         return erange[1]:erange[2]
-    elseif type == "IndexArray_t"
+    elseif type == CGNS.IndexArray_t
         return vec(get_value(node))
     else
         error("Reading $type not implemented yet")
@@ -173,13 +199,13 @@ Read the "ZoneBC_t" node to build bnd connectivities.
 See `read_bc` for more information of what is returned.
 """
 function read_zoneBC(zone, elts, verbose)
-    zoneBC = get_child(zone; type = "ZoneBC_t")
+    zoneBC = get_child(zone; label = CGNS.ZoneBC_t)
 
     # Premature exit if no ZoneBC is present
     isnothing(zoneBC) && (return nothing)
 
     # Read each BC
-    bcs = map(bc -> read_bc(bc, elts, verbose), get_children(zoneBC; type = "BC_t"))
+    bcs = map(bc -> read_bc(bc, elts, verbose), get_children(zoneBC; label = CGNS.BC_t))
     return bcs
 end
 
@@ -193,14 +219,14 @@ belonging to this BC.
 """
 function read_bc(bc, elts, verbose)
     # BC name
-    familyName = get_child(bc; type = "FamilyName_t")
+    familyName = get_child(bc; label = CGNS.FamilyName_t)
     bcname = isnothing(familyName) ? get_name(bc) : get_value(familyName)
     verbose && println("Reading BC '$bcname'")
 
     # BC connectivity
-    bc_type = get_value(get_child(bc; type = "GridLocation_t"))
-    indexRange = get_child(bc; type = "IndexRange_t")
-    pointList = get_child(bc; type = "IndexArray_t")
+    bc_type = parse_to_string(get_value(get_child(bc; label = CGNS.GridLocation_t)))
+    indexRange = get_child(bc; label = CGNS.IndexRange_t)
+    pointList = get_child(bc; label = CGNS.IndexArray_t)
 
     # BC topodim : it's not always possible to determine it, so it's negative by default
     bcdim = -1
@@ -341,7 +367,7 @@ Read all the flow solutions in the Zone, filtering data arrays whose name is not
 """
 function read_solutions(zone, varnames, verbose)
     # fSols =
-    #     map(fs -> read_solution(fs, varnames), get_children(zone; type = "FlowSolution_t"))
+    #     map(fs -> read_solution(fs, varnames), get_children(zone; label = "FlowSolution_t"))
 
     # n_vertex_fsol = count(fs -> fs.gridLocation == "Vertex", fSols)
     # n_cell_fsol = count(fs -> fs.gridLocation == "CellCenter", fSols)
@@ -357,7 +383,7 @@ function read_solutions(zone, varnames, verbose)
 
     fSols = Dict(
         get_name(fs) => read_solution(zone, fs, varnames) for
-        fs in get_children(zone; type = "FlowSolution_t")
+        fs in get_children(zone; label = CGNS.FlowSolution_t)
     )
 
     return fSols
@@ -372,10 +398,10 @@ function read_solution(zone, fs, varnames)
     # Read GridLocation : we could deal with a missing GridLocation node, by later comparing
     # the length of the DataArray to the number of cells / nodes of the zone. Let's do this
     # later.
-    node = get_child(fs; type = "GridLocation_t")
+    node = get_child(fs; label = CGNS.GridLocation_t)
     if isnothing(node)
         _nnodes, _ncells, _ = get_zone_dims(zone)
-        dArray = get_child(fs; type = "DataArray_t")
+        dArray = get_child(fs; label = CGNS.DataArray_t)
         err_msg = "Could not determine GridLocation in FlowSolution '$(get_name(fs))'"
         @assert !isnothing(dArray) err_msg
         x = get_value(dArray)
@@ -392,7 +418,7 @@ function read_solution(zone, fs, varnames)
     end
 
     # Read variables matching asked "varnames"
-    dArrays = get_children(fs; type = "DataArray_t")
+    dArrays = get_children(fs; label = CGNS.DataArray_t)
     if varnames != "*"
         # filter to obtain only the desired variables names
         filter!(dArray -> get_name(dArray) in varnames, dArrays)
@@ -417,11 +443,25 @@ function cgns_mesh_to_bcube_mesh(zoneCGNS)
     c2nnodes = map(nnodes, c2t)
 
     if isnothing(zoneCGNS.bcs)
-        return Bcube.Mesh(nodes, c2t, Bcube.Connectivity(c2nnodes, c2n))
+        return Bcube.Mesh(
+            nodes,
+            c2t,
+            Bcube.Connectivity(c2nnodes, c2n);
+            absoluteNodeIndices = zoneCGNS.vtx_ln_to_gn,
+            absoluteCellIndices = zoneCGNS.cell_ln_to_gn,
+        )
     else
         bc_names = Dict(i => bc.bcname for (i, bc) in enumerate(zoneCGNS.bcs))
         bc_nodes = Dict(i => Int.(bc.bcnodes) for (i, bc) in enumerate(zoneCGNS.bcs))
-        return Bcube.Mesh(nodes, c2t, Bcube.Connectivity(c2nnodes, c2n); bc_names, bc_nodes)
+        return Bcube.Mesh(
+            nodes,
+            c2t,
+            Bcube.Connectivity(c2nnodes, c2n);
+            bc_names,
+            bc_nodes,
+            absoluteNodeIndices = zoneCGNS.vtx_ln_to_gn,
+            absoluteCellIndices = zoneCGNS.cell_ln_to_gn,
+        )
     end
 end
 
@@ -491,21 +531,32 @@ Return a Dict of (String) keys and associated values. If the ReferenceState node
 `nothing` is returned.
 """
 function read_ref_state(base)
-    refState = get_child(base; name = "ReferenceState", type = "ReferenceState_t")
+    refState = get_child(base; name = "ReferenceState", label = CGNS.ReferenceState_t)
     return isnothing(refState) ? refState : _recursive_parse(refState, 0, 2)
 end
 
-read_grid_location_child(node) = get_value(get_child(node; type = "GridLocation_t"))
+read_grid_location_child(node) = get_value(get_child(node; label = CGNS.GridLocation_t))
+
+"""
+    parse_to_string(a::String)
+    parse_to_string(iterable)
+
+# Dev notes
+Trick to deal with `PyIterable` when they are composed of arrays of UInt8...
+The signature is not very satisfying because applying the correct one would require to depend on `PythonCall`...
+"""
+parse_to_string(a::String) = a
+parse_to_string(iterable) = String([first(c) for c in iterable])
 
 function _recursive_parse(node, depth, max_depth)
     # If it's a DataArray, return the value (scalar if necessary)
-    if get_cgns_type(node) == "DataArray_t"
+    if get_label(node) == CGNS.DataArray_t
         x = get_value(node)
         return length(x) > 1 ? x : first(x)
     end
 
-    if (get_cgns_type(node) == "Descriptor_t") ||
-       has_child(node; type = "DimensionalExponents_t")
+    if (get_label(node) == CGNS.Descriptor_t) ||
+       has_child(node; label = CGNS.DimensionalExponents_t)
         return get_value(node)
     end
 
@@ -514,5 +565,8 @@ function _recursive_parse(node, depth, max_depth)
         return get_value(node)
     end
 
-    Dict(get_name(child) => _recursive_parse(child, depth + 1, max_depth) for child in node)
+    Dict(
+        get_name(child) => _recursive_parse(child, depth + 1, max_depth) for
+        child in get_children(node)
+    )
 end

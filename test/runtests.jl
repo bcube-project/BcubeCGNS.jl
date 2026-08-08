@@ -13,6 +13,9 @@ function custom_include(path)
     println("done.")
 end
 
+# Assets
+const assets_path = joinpath(@__DIR__, "assets")
+
 # This dir will be removed at the end of the tests
 tempdir = mktempdir()
 
@@ -23,4 +26,6 @@ fname2sum = Dict(r[2] => r[1] for r in eachrow(f))
 
 @testset "BcubeGmsh.jl" begin
     custom_include("./test_read.jl")
+    custom_include("./test_write.jl")
+    custom_include("./test_cgns_mesh.jl")
 end
