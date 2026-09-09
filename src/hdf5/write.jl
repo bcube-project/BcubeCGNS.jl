@@ -200,12 +200,7 @@ function set_cgns_root!(root)
     version = "HDF5 Version $(v.major).$(v.minor).$(v.patch)"
     root[" hdf5version"] = str2int8_with_fixed_length(version, 33)
 
-    # @show HDF5.API.H5T_NATIVE_DOUBLE
-    # @show HDF5.API.H5T_NATIVE_FLOAT
-    # @show HDF5.API.H5T_IEEE_F32BE
-    # @show HDF5.API.H5T_IEEE_F32LE
-    # @show HDF5.API.H5T_IEEE_F64BE
-    # @show HDF5.API.H5T_IEEE_F64LE
+    # From Cassiopee : https://github.com/onera/Cassiopee/blob/dev/Cassiopee/Converter/Converter/IO/GenIO_hdfcgns.cpp
     if HDF5.API.H5T_NATIVE_FLOAT == HDF5.API.H5T_IEEE_F32BE
         format = "IEEE_BIG_32"
     elseif HDF5.API.H5T_NATIVE_FLOAT == HDF5.API.H5T_IEEE_F32LE
@@ -215,10 +210,10 @@ function set_cgns_root!(root)
     elseif HDF5.API.H5T_NATIVE_FLOAT == HDF5.API.H5T_IEEE_F64LE
         format = "IEEE_LITTLE_64"
     else
-        @warn "Could not determine float type, assuming IEEE_LITTLE_32"
-        format = "IEEE_LITTLE_32"
+        d = Int(HDF5.API.h5t_get_precision(HDF5.API.H5T_NATIVE_FLOAT))
+        format = "NATIVE_$d"
     end
-    root[" format"] = str2int8(format)
+    root[" format"] = str2int8_with_fixed_length(format, 33)
 end
 
 function create_cgns_elements(mesh, zone; write_bnd_faces = false, verbose = false)
