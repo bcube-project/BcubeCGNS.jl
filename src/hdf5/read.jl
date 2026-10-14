@@ -160,13 +160,14 @@ end
 function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
     # Number of elements
     zonedims = get_value(zone)
-    nvertices_struct = zonedims[:, 1]
+    nvertices_struct = view(zonedims, 1:topo_dim, 1)
     nvertices = prod(nvertices_struct)
-    ncells_struct = zonedims[:, 2]
+    ncells_struct = view(zonedims, 1:topo_dim, 2)
     ncells = prod(ncells_struct)
     verbose && println(
         "nvertices = $(nvertices_struct) ($nvertices), ncells = $(ncells_struct) ($ncells)",
     )
+    @assert ncells > 0 "Cannot read the structured zone of topo_dim = $(topo_dim) : there is no cell."
 
     # Numbering conversion struct->unstr
     N = length(ncells_struct)
