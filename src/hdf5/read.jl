@@ -1,11 +1,11 @@
 function Bcube.read_file(
     ::CGNSHDF5IoHandler,
     filepath::String;
-    domains=String[],
-    varnames=nothing,
-    topodim=0,
-    spacedim=0,
-    verbose=false,
+    domains = String[],
+    varnames = nothing,
+    topodim = 0,
+    spacedim = 0,
+    verbose = false,
     kwargs...,
 )
     return h5open(filepath, "r") do file
@@ -16,11 +16,11 @@ end
 
 function read_tree(
     tree;
-    domains=String[],
-    varnames=nothing,
-    topodim=0,
-    spacedim=0,
-    verbose=false,
+    domains = String[],
+    varnames = nothing,
+    topodim = 0,
+    spacedim = 0,
+    verbose = false,
     kwargs...,
 )
     @assert length(domains) == 0 "Reading only some domains is not supported yet (but easy to implement)"
@@ -38,7 +38,7 @@ function read_tree(
     verbose && println("topodim = $topodim, spacedim = $(zone_space_dim)")
 
     # Find the list of Zone_t
-    zones = get_children(cgnsBase; label=CGNS.Zone_t)
+    zones = get_children(cgnsBase; label = CGNS.Zone_t)
     if length(zones) == 0
         error("Could not find any Zone_t node in the file")
     elseif length(zones) > 1
@@ -103,22 +103,10 @@ function read_zone_unstr(zone, varnames, topo_dim, zone_space_dim, usr_space_dim
     verbose && println("nvertices = $nvertices, ncells = $ncells")
 
     # Read GridCoordinates
-    gridCoordinates = get_child(zone; label=CGNS.GridCoordinates_t)
-    coordXNode = get_child(gridCoordinates; name="CoordinateX")
-    coords = zeros(eltype(get_value(coordXNode)), nvertices, zone_space_dim)
-    suffixes = ["X", "Y", "Z"]
-    for (idim, suffix) in enumerate(suffixes[1:zone_space_dim])
-        node = get_child(gridCoordinates; name="Coordinate" * suffix)
-        coords[:, idim] .= get_value(node)
-    end
-
-    # Resize the `coords` array if necessary
-    _space_dim =
-        usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
-    coords = coords[:, 1:_space_dim]
+    coords = read_grid_coordinates(zone, zone_space_dim, usr_space_dim)
 
     # Read all elements
-    elts = map(read_connectivity, get_children(zone; label=CGNS.Elements_t))
+    elts = map(read_connectivity, get_children(zone; label = CGNS.Elements_t))
 
     # Filter "volumic" elements to build the volumic connectivities arrays
     volumicElts = filter(elt -> is_volumic_entity(first(elt.c2t), topo_dim), elts)
@@ -175,39 +163,26 @@ function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_di
     ijk2I = LinearIndices(Dims(nvertices_struct))
 
     # Read GridCoordinates
-    gridCoordinates = get_child(zone; label="GridCoordinates_t")
-    coordXNode = get_child(gridCoordinates; name="CoordinateX")
-    X = flatten_struct_to_unstr(get_value(coordXNode))
-    coords = zeros(eltype(X), nvertices, zone_space_dim)
-    suffixes = ["X", "Y", "Z"]
-    for (idim, suffix) in enumerate(suffixes[1:zone_space_dim])
-        node = get_child(gridCoordinates; name="Coordinate" * suffix)
-        coords[:, idim] .= flatten_struct_to_unstr(get_value(node))
-    end
-
-    # Resize the `coords` array if necessary
-    _space_dim =
-        usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
-    coords = coords[:, 1:_space_dim]
+    coords = read_grid_coordinates(zone, zone_space_dim, usr_space_dim)
 
     # Read all elements
     if topo_dim == 3
         c2n = [
             (
                 ijk2I[i, j, k],
-                ijk2I[i+1, j, k],
-                ijk2I[i+1, j+1, k],
-                ijk2I[i, j+1, k],
-                ijk2I[i, j, k+1],
-                ijk2I[i+1, j, k+1],
-                ijk2I[i+1, j+1, k+1],
-                ijk2I[i, j+1, k+1],
+                ijk2I[i + 1, j, k],
+                ijk2I[i + 1, j + 1, k],
+                ijk2I[i, j + 1, k],
+                ijk2I[i, j, k + 1],
+                ijk2I[i + 1, j, k + 1],
+                ijk2I[i + 1, j + 1, k + 1],
+                ijk2I[i, j + 1, k + 1],
             ) for (i, j, k) in Iterators.product(tdims_cell...)
         ]
         c2t = fill(BCUBE_ENTITY_TO_CGNS_ENTITY[Bcube.Hexa8_t], ncells)
     elseif topo_dim == 2
         c2n = [
-            (ijk2I[i, j], ijk2I[i+1, j], ijk2I[i+1, j+1], ijk2I[i, j+1]) for
+            (ijk2I[i, j], ijk2I[i + 1, j], ijk2I[i + 1, j + 1], ijk2I[i, j + 1]) for
             (i, j) in Iterators.product(tdims_cell...)
         ]
         c2t = fill(BCUBE_ENTITY_TO_CGNS_ENTITY[Bcube.Quad4_t], ncells)
@@ -238,6 +213,25 @@ function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_di
     return (; coords, c2t, c2n, bcs, fSols, vtx_ln_to_gn, cell_ln_to_gn)
 end
 
+function read_grid_coordinates(zone, zone_space_dim, usr_space_dim)
+    gridCoordinates = get_child(zone; label = CGNS.GridCoordinates_t)
+    coordXNode = get_child(gridCoordinates; name = "CoordinateX")
+    tmpX = flatten_struct_to_unstr(get_value(coordXNode))
+    coords = zeros(eltype(tmpX), length(tmpX), zone_space_dim)
+    suffixes = ["X", "Y", "Z"]
+    for (idim, suffix) in enumerate(suffixes[1:zone_space_dim])
+        node = get_child(gridCoordinates; name = "Coordinate" * suffix)
+        coords[:, idim] .= flatten_struct_to_unstr(get_value(node))
+    end
+
+    # Resize the `coords` array if necessary
+    _space_dim =
+        usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
+    coords = coords[:, 1:_space_dim]
+
+    return coords
+end
+
 """
 Read an "Elements_t" node and returns a named Tuple of three elements:
 * `erange`, the content of the `ElementRange` node
@@ -245,22 +239,22 @@ Read an "Elements_t" node and returns a named Tuple of three elements:
 * `c2n`, the cell -> node connectivity, flattened if `reshape = false`, as an array (nelts, nnodes_by_elt) if `reshape = true`
 * `name`, only for dbg
 """
-function read_connectivity(node, reshape=false)
+function read_connectivity(node, reshape = false)
     @assert get_label(node) == CGNS.Elements_t
 
     # Build cell to (cgns) type
     code, _ = get_value(node)
-    erange = read_index(get_child(node; name="ElementRange"))
+    erange = read_index(get_child(node; name = "ElementRange"))
     nelts = length(erange)
     c2t = fill(code, nelts)
 
     # Build cell to node and reshapce
-    c2n = get_value(get_child(node; name="ElementConnectivity"))
+    c2n = get_value(get_child(node; name = "ElementConnectivity"))
 
     nnodes_by_elt = nnodes(cgns_entity_to_bcube_entity(code))
     reshape && (c2n = reshape(c2n, nelts, nnodes_by_elt))
 
-    return (; erange, c2t, c2n, nelts, name=get_name(node))
+    return (; erange, c2t, c2n, nelts, name = get_name(node))
 end
 
 """
@@ -288,13 +282,13 @@ Read the "ZoneBC_t" node to build bnd connectivities.
 See `read_bc` for more information of what is returned.
 """
 function read_zoneBC(zone, elts, verbose)
-    zoneBC = get_child(zone; label=CGNS.ZoneBC_t)
+    zoneBC = get_child(zone; label = CGNS.ZoneBC_t)
 
     # Premature exit if no ZoneBC is present
     isnothing(zoneBC) && (return nothing)
 
     # Read each BC
-    bcs = map(bc -> read_bc(bc, elts, verbose), get_children(zoneBC; label=CGNS.BC_t))
+    bcs = map(bc -> read_bc(bc, elts, verbose), get_children(zoneBC; label = CGNS.BC_t))
     return bcs
 end
 
@@ -308,14 +302,14 @@ belonging to this BC.
 """
 function read_bc(bc, elts, verbose)
     # BC name
-    familyName = get_child(bc; label=CGNS.FamilyName_t)
+    familyName = get_child(bc; label = CGNS.FamilyName_t)
     bcname = isnothing(familyName) ? get_name(bc) : get_value(familyName)
     verbose && println("Reading BC '$bcname'")
 
     # BC connectivity
-    bc_type = parse_to_string(get_value(get_child(bc; label=CGNS.GridLocation_t)))
-    indexRange = get_child(bc; label=CGNS.IndexRange_t)
-    pointList = get_child(bc; label=CGNS.IndexArray_t)
+    bc_type = parse_to_string(get_value(get_child(bc; label = CGNS.GridLocation_t)))
+    indexRange = get_child(bc; label = CGNS.IndexRange_t)
+    pointList = get_child(bc; label = CGNS.IndexArray_t)
 
     # BC topodim : it's not always possible to determine it, so it's negative by default
     bcdim = -1
@@ -350,7 +344,7 @@ function read_bc(bc, elts, verbose)
                     nnodes_concerned = nelts_concerned * nnodes_by_elt
                     offset = (erange[1] - i1) * nnodes_by_elt
 
-                    push!(bcnodes, elt.c2n[(1+offset):(offset+nnodes_concerned)]...)
+                    push!(bcnodes, elt.c2n[(1 + offset):(offset + nnodes_concerned)]...)
 
                     nelts_found += nelts_concerned
                     verbose && println("$(nelts_concerned) elts found in '$(elt.name)'")
@@ -368,7 +362,7 @@ function read_bc(bc, elts, verbose)
                     nnodes_concerned = nelts_concerned * nnodes_by_elt
                     offset = (max(i1, erange[1]) - i1) * nnodes_by_elt
 
-                    push!(bcnodes, elt.c2n[(1+offset):(offset+nnodes_concerned)]...)
+                    push!(bcnodes, elt.c2n[(1 + offset):(offset + nnodes_concerned)]...)
 
                     nelts_found += nelts_concerned
                     verbose && println("$(nelts_concerned) elts found in '$(elt.name)'")
@@ -412,7 +406,7 @@ function read_bc(bc, elts, verbose)
                     iEnd = findfirst(i -> i > i2, view(bc_elts_ind, icurr:nelts_bc)) - 1
                 end
                 offset = (bc_elts_ind[icurr] - i1) * nnodes_by_elt
-                push!(bcnodes, elt.c2n[(1+offset):(nnodes_by_elt*(iEnd-i1+1))]...)
+                push!(bcnodes, elt.c2n[(1 + offset):(nnodes_by_elt * (iEnd - i1 + 1))]...)
                 icurr = iEnd + 1
 
                 (icurr > nelts_bc) && break
@@ -472,7 +466,7 @@ function read_solutions(zone, varnames, verbose)
 
     fSols = Dict(
         get_name(fs) => read_solution(zone, fs, varnames) for
-        fs in get_children(zone; label=CGNS.FlowSolution_t)
+        fs in get_children(zone; label = CGNS.FlowSolution_t)
     )
 
     return fSols
@@ -487,10 +481,10 @@ function read_solution(zone, fs, varnames)
     # Read GridLocation : we could deal with a missing GridLocation node, by later comparing
     # the length of the DataArray to the number of cells / nodes of the zone. Let's do this
     # later.
-    node = get_child(fs; label=CGNS.GridLocation_t)
+    node = get_child(fs; label = CGNS.GridLocation_t)
     if isnothing(node)
         _nnodes, _ncells, _ = get_zone_dims(zone)
-        dArray = get_child(fs; label=CGNS.DataArray_t)
+        dArray = get_child(fs; label = CGNS.DataArray_t)
         err_msg = "Could not determine GridLocation in FlowSolution '$(get_name(fs))'"
         @assert !isnothing(dArray) err_msg
         x = get_value(dArray)
@@ -507,12 +501,15 @@ function read_solution(zone, fs, varnames)
     end
 
     # Read variables matching asked "varnames"
-    dArrays = get_children(fs; label=CGNS.DataArray_t)
+    dArrays = get_children(fs; label = CGNS.DataArray_t)
     if varnames != "*"
         # filter to obtain only the desired variables names
         filter!(dArray -> get_name(dArray) in varnames, dArrays)
     end
-    data = Dict(get_name(dArray) => flatten_struct_to_unstr(get_value(dArray)) for dArray in dArrays)
+    data = Dict(
+        get_name(dArray) => flatten_struct_to_unstr(get_value(dArray)) for
+        dArray in dArrays
+    )
 
     # Flow solution name
     name = get_name(fs)
@@ -536,8 +533,8 @@ function cgns_mesh_to_bcube_mesh(zoneCGNS)
             nodes,
             c2t,
             Bcube.Connectivity(c2nnodes, c2n);
-            absoluteNodeIndices=zoneCGNS.vtx_ln_to_gn,
-            absoluteCellIndices=zoneCGNS.cell_ln_to_gn,
+            absoluteNodeIndices = zoneCGNS.vtx_ln_to_gn,
+            absoluteCellIndices = zoneCGNS.cell_ln_to_gn,
         )
     else
         bc_names = Dict(i => bc.bcname for (i, bc) in enumerate(zoneCGNS.bcs))
@@ -548,8 +545,8 @@ function cgns_mesh_to_bcube_mesh(zoneCGNS)
             Bcube.Connectivity(c2nnodes, c2n);
             bc_names,
             bc_nodes,
-            absoluteNodeIndices=zoneCGNS.vtx_ln_to_gn,
-            absoluteCellIndices=zoneCGNS.cell_ln_to_gn,
+            absoluteNodeIndices = zoneCGNS.vtx_ln_to_gn,
+            absoluteCellIndices = zoneCGNS.cell_ln_to_gn,
         )
     end
 end
@@ -585,7 +582,7 @@ function flow_solutions_to_bcube_data(fSols)
     )
 end
 
-function compute_space_dim(topodim, coords, tol=1e-15; verbose=true)
+function compute_space_dim(topodim, coords, tol = 1e-15; verbose = true)
     spacedim = size(coords, 2)
 
     xmin, xmax = extrema(view(coords, :, 1))
@@ -620,14 +617,14 @@ Return a Dict of (String) keys and associated values. If the ReferenceState node
 `nothing` is returned.
 """
 function read_ref_state(base)
-    refState = get_child(base; name="ReferenceState", label=CGNS.ReferenceState_t)
+    refState = get_child(base; name = "ReferenceState", label = CGNS.ReferenceState_t)
     return isnothing(refState) ? refState : _recursive_parse(refState, 0, 2)
 end
 
-read_grid_location_child(node) = get_value(get_child(node; label=CGNS.GridLocation_t))
+read_grid_location_child(node) = get_value(get_child(node; label = CGNS.GridLocation_t))
 
 function read_zone_type(node)
-    zoneTypeNode = get_child(node; label=CGNS.ZoneType_t)
+    zoneTypeNode = get_child(node; label = CGNS.ZoneType_t)
     @assert !isnothing(zoneTypeNode) "Could not determine zone type, missing ZoneType_t node?"
     zoneType = parse_to_string(get_value(zoneTypeNode))
     @assert zoneType ∈ ("Structured", "Unstructured")
@@ -653,7 +650,7 @@ function _recursive_parse(node, depth, max_depth)
     end
 
     if (get_label(node) == CGNS.Descriptor_t) ||
-        has_child(node; label=CGNS.DimensionalExponents_t)
+       has_child(node; label = CGNS.DimensionalExponents_t)
         return get_value(node)
     end
 

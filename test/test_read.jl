@@ -6,7 +6,7 @@
 
             # read
             filepath = joinpath(@__DIR__, "assets", "$(basename).cgns")
-            result = read_file(filepath; varnames="*")
+            result = read_file(filepath; varnames = "*")
 
             # write
             filepath = joinpath(tempdir, "$(basename).vtu")

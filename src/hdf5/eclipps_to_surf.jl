@@ -9,7 +9,7 @@ Warning : for now it is limited to only one BC because Bcube doesn't support mul
     * todo : add an option to retrieve boundary conditions of the extracted surface(s)
     * find a way to factorize the beginning of the code with `read_file`
 """
-function extract_surf_from_eclipps(filepath::String, bcnames; verbose=false)
+function extract_surf_from_eclipps(filepath::String, bcnames; verbose = false)
     # Open the file
     tree = h5open(CGNS.hdf5_to_node, filepath, "r")
 
@@ -24,7 +24,7 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose=false)
     verbose && println("topodim = $topodim, spacedim = $(spacedim)")
 
     # Find the list of Zone_t
-    zones = get_children(cgnsBase; label=CGNS.Zone_t)
+    zones = get_children(cgnsBase; label = CGNS.Zone_t)
     if length(zones) == 0
         error("Could not find any Zone_t node in the file")
     elseif length(zones) > 1
@@ -32,9 +32,8 @@ function extract_surf_from_eclipps(filepath::String, bcnames; verbose=false)
     end
     zone = first(zones)
 
-
     # Deal with struct/unstr
-    zonetype = get_value(get_child(zone; name="ZoneType", type="ZoneType_t"))
+    zonetype = get_value(get_child(zone; name = "ZoneType", type = "ZoneType_t"))
     is_unstructured = zonetype == "Unstructured"
 
     if is_unstructured
@@ -67,11 +66,11 @@ function extract_surf_from_unstr_eclipps(zone, topodim, spacedim, bcnames, verbo
     # Reshape c2n into a vector of vectors for convenience
     offsets = cumsum(nnodes.(cgns_entity_to_bcube_entity.(c2t))) .+ 1
     prepend!(offsets, 1)
-    c2n = [view(c2n, offsets[i]:(offsets[i+1]-1)) for i in 1:length(c2t)]
+    c2n = [view(c2n, offsets[i]:(offsets[i + 1] - 1)) for i in 1:length(c2t)]
 
     # Read ZoneBC and filter the ones we are interested in
-    zoneBC = get_child(zone; label=CGNS.ZoneBC_t)
-    bcs = get_children(zoneBC; label=CGNS.BC_t)
+    zoneBC = get_child(zone; label = CGNS.ZoneBC_t)
+    bcs = get_children(zoneBC; label = CGNS.BC_t)
     filter!(z -> get_name(z) in bcnames, bcs)
     _bcs = map(read_eclipps_bc, bcs)
     @assert length(_bcs) == 1 "Wrong number of BC found ($(length(bcs) ))"
@@ -90,7 +89,7 @@ function extract_surf_from_unstr_eclipps(zone, topodim, spacedim, bcnames, verbo
         # in the Mesh.
 
         # TODO : deal with "PointRange"
-        new2old_nodes = read_index(get_child(bc_node; name="PointList"))
+        new2old_nodes = read_index(get_child(bc_node; name = "PointList"))
     else
         # Identify the subset of required nodes
         node2selected = zeros(Bool, size(coords, 1))
@@ -112,13 +111,13 @@ function extract_surf_from_unstr_eclipps(zone, topodim, spacedim, bcnames, verbo
     # Build the Bcube mesh
     verbose && (@warn "Setting artificial local to global numbering")
     new_ZoneBC = (;
-        coords=view(coords, new2old_nodes, :),
-        c2t=view(c2t, g2l[bc.ielts]),
-        c2n=_c2n,
-        bcs=nothing,
-        fSols=nothing,
-        vtx_ln_to_gn=1:n_new,
-        cell_ln_to_gn=1:length(bc.ielts),
+        coords = view(coords, new2old_nodes, :),
+        c2t = view(c2t, g2l[bc.ielts]),
+        c2n = _c2n,
+        bcs = nothing,
+        fSols = nothing,
+        vtx_ln_to_gn = 1:n_new,
+        cell_ln_to_gn = 1:length(bc.ielts),
     )
     mesh = cgns_mesh_to_bcube_mesh(new_ZoneBC)
 
@@ -143,15 +142,15 @@ end
 
 function extract_surf_from_struct_eclipps(zone, topodim, spacedim, bcnames, verbose)
     # Read zone
-    @unpack coords, c2t, c2n, bcs = read_zone(zone, nothing, topodim, spacedim, 0, verbose)
+    coords = read_grid_coordinates(zone, spacedim, spacedim)
 
     zonedims = get_value(zone)
     nvertices_struct = zonedims[:, 1]
     ijk2I = LinearIndices(Dims(nvertices_struct))
 
     # Read ZoneBC and filter the ones we are interested in
-    zoneBC = get_child(zone; label=CGNS.ZoneBC_t)
-    bcs = get_children(zoneBC; label=CGNS.BC_t)
+    zoneBC = get_child(zone; label = CGNS.ZoneBC_t)
+    bcs = get_children(zoneBC; label = CGNS.BC_t)
     filter!(z -> get_name(z) in bcnames, bcs)
     _bcs = map(read_eclipps_bc, bcs)
     @assert length(_bcs) == 1 "Wrong number of BC found ($(length(bcs) ))"
@@ -181,8 +180,8 @@ function extract_surf_from_struct_eclipps(zone, topodim, spacedim, bcnames, verb
     # defined by the "SurfacicElementList".
     # For now, I still decide to keep these nodes-belonging-to-no-element
     # in the Mesh.
-    node_name = has_child(bc_node; name="PointList") ? "PointList" : "PointRange"
-    ind = read_index(get_child(bc_node; name=node_name))
+    node_name = has_child(bc_node; name = "PointList") ? "PointList" : "PointRange"
+    ind = read_index(get_child(bc_node; name = node_name))
     ind = reshape(ind, spacedim, :)
     new2old_nodes = map(col -> ijk2I[col...], eachcol(ind))
     nnodes_new = length(new2old_nodes)
@@ -197,13 +196,13 @@ function extract_surf_from_struct_eclipps(zone, topodim, spacedim, bcnames, verb
 
     # Build the Bcube mesh
     new_ZoneBC = (;
-        coords=view(coords, new2old_nodes, :),
+        coords = view(coords, new2old_nodes, :),
         c2t,
-        c2n=_c2n,
-        bcs=nothing,
-        fSols=nothing,
-        vtx_ln_to_gn=1:nnodes_new,
-        cell_ln_to_gn=1:length(c2t),
+        c2n = _c2n,
+        bcs = nothing,
+        fSols = nothing,
+        vtx_ln_to_gn = 1:nnodes_new,
+        cell_ln_to_gn = 1:length(c2t),
     )
     mesh = cgns_mesh_to_bcube_mesh(new_ZoneBC)
 
@@ -217,19 +216,24 @@ function extract_surf_from_struct_eclipps(zone, topodim, spacedim, bcnames, verb
     end
     if bc.gridLocation == "Vertex"
         # Check that all arrays have the correct length before wrapping them as MeshPointData
-        @assert all(((fname, name_and_array),) -> all(length.(last.(name_and_array)) .== nnodes_new), _data)
+        @assert all(
+            ((fname, name_and_array),) ->
+                all(length.(last.(name_and_array)) .== nnodes_new),
+            _data,
+        )
         data = Dict(
-            fname => Dict(name =>
-                MeshPointData(array)
-                          for (name, array) in d) for (fname, d) in _data
+            fname => Dict(name => MeshPointData(array) for (name, array) in d) for
+            (fname, d) in _data
         )
     elseif bc.gridLocation == "FaceCenter"
         # Check that all arrays have the correct length before wrapping them as MeshCellData
-        @assert all(((fname, name_and_array),) -> all(length.(last.(name_and_array)) .== nelts), _data)
+        @assert all(
+            ((fname, name_and_array),) -> all(length.(last.(name_and_array)) .== nelts),
+            _data,
+        )
         data = Dict(
-            fname => Dict(name =>
-                MeshCellData(array)
-                          for (name, array) in d) for (fname, d) in _data
+            fname => Dict(name => MeshCellData(array) for (name, array) in d) for
+            (fname, d) in _data
         )
     else
         error("Cannot read data with GridLocation = '$(bc.gridLocation)'")
@@ -248,9 +252,9 @@ function read_eclipps_bc(bc)
     ielts = vec(
         get_value(
             get_child(
-                get_child(bc; name="SurfacicElementList");
-                name="List",
-                label=CGNS.DataArray_t,
+                get_child(bc; name = "SurfacicElementList");
+                name = "List",
+                label = CGNS.DataArray_t,
             ),
         ),
     )
@@ -258,14 +262,14 @@ function read_eclipps_bc(bc)
     # GridLocation
     gridLocation = read_grid_location_child(bc)
 
-    bcDataSets = get_children(bc; label=CGNS.BCDataSet_t)
+    bcDataSets = get_children(bc; label = CGNS.BCDataSet_t)
     function f(n)
         (get_name(n) ∈ ("DirichletData", "NeumannData")) && (get_label(n) == CGNS.BCData_t)
     end
     filter!(bcs -> has_child(bcs, f), bcDataSets)
     data = map(read_eclipps_bcdataset, bcDataSets)
 
-    return (; bcname=get_name(bc), ielts, data, gridLocation)
+    return (; bcname = get_name(bc), ielts, data, gridLocation)
 end
 
 """
@@ -273,23 +277,23 @@ Return a NamedTuple with two entries : "dirichlet" and "neumann". For
 each entry, a vector of (name,value) for each "data" (ex: temperature)
 """
 function read_eclipps_bcdataset(bcs)
-    bcData = get_child(bcs; name="DirichletData", label=CGNS.BCData_t)
-    dirichlet = if isnothing(bcData) || !has_child(bcData; label=CGNS.DataArray_t)
+    bcData = get_child(bcs; name = "DirichletData", label = CGNS.BCData_t)
+    dirichlet = if isnothing(bcData) || !has_child(bcData; label = CGNS.DataArray_t)
         nothing
     else
-        map(get_children(bcData; label=CGNS.DataArray_t)) do data
-            (name=get_name(data), value=get_value(data))
+        map(get_children(bcData; label = CGNS.DataArray_t)) do data
+            (name = get_name(data), value = get_value(data))
         end
     end
 
-    bcData = get_child(bcs; name="NeumannData", label=CGNS.BCData_t)
-    neumann = if isnothing(bcData) || !has_child(bcData; label=CGNS.DataArray_t)
+    bcData = get_child(bcs; name = "NeumannData", label = CGNS.BCData_t)
+    neumann = if isnothing(bcData) || !has_child(bcData; label = CGNS.DataArray_t)
         nothing
     else
-        map(get_children(bcData; label=CGNS.DataArray_t)) do data
-            (name=get_name(data), value=get_value(data))
+        map(get_children(bcData; label = CGNS.DataArray_t)) do data
+            (name = get_name(data), value = get_value(data))
         end
     end
 
-    return (; name=get_name(bcs), dirichlet, neumann)
+    return (; name = get_name(bcs), dirichlet, neumann)
 end
