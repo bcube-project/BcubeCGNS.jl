@@ -52,7 +52,7 @@ function extract_surf_from_unstr_eclipps(zone, topodim, spacedim, bcnames, verbo
 
     # Read zone, but only elements of topology less than 1 compared to the zone dim
     @unpack coords, c2t, c2n, cell_ln_to_gn, bcs =
-        read_zone(zone, nothing, topodim - 1, spacedim, 0, verbose)
+        read_zone(zone, nothing, topodim - 1, spacedim, verbose)
 
     # Create the glob to local numbering. Indeed, we extracted only surfacic elements so c2t[1]
     # is not (in general) the "element 1" of the CGNS tree. It is only (and even, we could get unlucky)
@@ -142,7 +142,7 @@ end
 
 function extract_surf_from_struct_eclipps(zone, topodim, spacedim, bcnames, verbose)
     # Read zone
-    coords = read_grid_coordinates(zone, spacedim, spacedim)
+    coords = read_grid_coordinates(zone, topodim, spacedim, verbose)
 
     zonedims = get_value(zone)
     nvertices_struct = zonedims[:, 1]
@@ -174,25 +174,37 @@ function extract_surf_from_struct_eclipps(zone, topodim, spacedim, bcnames, verb
     # Build the mapping old -> new nodes number
     # This is necessary because the BC only uses a subset of the Zone nodes,
     # so we need to identify this subset, and build a new numbering.
-    old2new_nodes = spzeros(Int, size(coords, 1))
-    # Note : I encountered some cases where the "PointList" defining
-    # the set of BC nodes is actually not equal to the set of nodes
-    # defined by the "SurfacicElementList".
-    # For now, I still decide to keep these nodes-belonging-to-no-element
-    # in the Mesh.
-    node_name = has_child(bc_node; name = "PointList") ? "PointList" : "PointRange"
-    ind = read_index(get_child(bc_node; name = node_name))
-    ind = reshape(ind, spacedim, :)
-    new2old_nodes = map(col -> ijk2I[col...], eachcol(ind))
-    nnodes_new = length(new2old_nodes)
-    old2new_nodes[new2old_nodes] .= 1:nnodes_new
-    verbose && println("Number of nodes in extracted surface : $(nnodes_new)")
+    c2n_vec = reduce(vcat, c2n)
+    if bc.gridLocation == "Vertex"
+        old2new_nodes = spzeros(Int, size(coords, 1))
+        # Note : I encountered some cases where the "PointList" defining
+        # the set of BC nodes is actually not equal to the set of nodes
+        # defined by the "SurfacicElementList".
+        # For now, I still decide to keep these nodes-belonging-to-no-element
+        # in the Mesh.
+        node_name = has_child(bc_node; name = "PointList") ? "PointList" : "PointRange"
+        ind = read_index(get_child(bc_node; name = node_name))
+        ind = reshape(ind, spacedim, :)
+        new2old_nodes = map(col -> ijk2I[col...], eachcol(ind))
+        nnodes_new = length(new2old_nodes)
+        old2new_nodes[new2old_nodes] .= 1:nnodes_new
+        verbose && println("Number of nodes in extracted surface : $(nnodes_new)")
 
-    # Build the new c2n
-    _c2n = map(c2n) do inodes
-        old2new_nodes[inodes]
+        # Build the new c2n
+        _c2n = old2new_nodes[c2n_vec]
+    elseif bc.gridLocation == "FaceCenter"
+        unique_nodes = unique(c2n_vec)
+        _, old2new_nodes = Bcube.densify(unique_nodes; permute_back = true)
+        nnodes_new = length(unique_nodes)
+
+        _c2n = map(iold -> old2new_nodes[iold], c2n_vec)
+        new2old_nodes = zeros(eltype(unique_nodes), nnodes_new)
+        for (old, new) in old2new_nodes
+            new2old_nodes[new] = old
+        end
+    else
+        error()
     end
-    _c2n = reduce(vcat, _c2n)
 
     # Build the Bcube mesh
     new_ZoneBC = (;

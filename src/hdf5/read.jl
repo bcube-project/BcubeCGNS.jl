@@ -47,7 +47,7 @@ function read_tree(
     zone = first(zones)
 
     # Read zone
-    zoneCGNS = read_zone(zone, varnames, topodim, zone_space_dim, spacedim, verbose)
+    zoneCGNS = read_zone(zone, varnames, topodim, spacedim, verbose)
 
     # Build Bcube Mesh
     mesh = cgns_mesh_to_bcube_mesh(zoneCGNS)
@@ -96,14 +96,14 @@ function read_zone(zone, args...)
     end
 end
 
-function read_zone_unstr(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
+function read_zone_unstr(zone, varnames, topo_dim, usr_space_dim, verbose)
 
     # Number of elements
     nvertices, ncells, nbnd = get_value(zone)
     verbose && println("nvertices = $nvertices, ncells = $ncells")
 
     # Read GridCoordinates
-    coords = read_grid_coordinates(zone, zone_space_dim, usr_space_dim)
+    coords = read_grid_coordinates(zone, topo_dim, usr_space_dim, verbose)
 
     # Read all elements
     elts = map(read_connectivity, get_children(zone; label = CGNS.Elements_t))
@@ -145,7 +145,7 @@ function read_zone_unstr(zone, varnames, topo_dim, zone_space_dim, usr_space_dim
     return (; coords, c2t, c2n, bcs, fSols, vtx_ln_to_gn, cell_ln_to_gn)
 end
 
-function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_dim, verbose)
+function read_zone_struct(zone, varnames, topo_dim, usr_space_dim, verbose)
     # Number of elements
     zonedims = get_value(zone)
     nvertices_struct = view(zonedims, 1:topo_dim, 1)
@@ -163,7 +163,7 @@ function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_di
     ijk2I = LinearIndices(Dims(nvertices_struct))
 
     # Read GridCoordinates
-    coords = read_grid_coordinates(zone, zone_space_dim, usr_space_dim)
+    coords = read_grid_coordinates(zone, topo_dim, usr_space_dim, verbose)
 
     # Read all elements
     if topo_dim == 3
@@ -213,21 +213,23 @@ function read_zone_struct(zone, varnames, topo_dim, zone_space_dim, usr_space_di
     return (; coords, c2t, c2n, bcs, fSols, vtx_ln_to_gn, cell_ln_to_gn)
 end
 
-function read_grid_coordinates(zone, zone_space_dim, usr_space_dim)
+function read_grid_coordinates(zone, topo_dim, usr_space_dim, verbose)
     gridCoordinates = get_child(zone; label = CGNS.GridCoordinates_t)
     coordXNode = get_child(gridCoordinates; name = "CoordinateX")
     tmpX = flatten_struct_to_unstr(get_value(coordXNode))
-    coords = zeros(eltype(tmpX), length(tmpX), zone_space_dim)
+
     suffixes = ["X", "Y", "Z"]
-    for (idim, suffix) in enumerate(suffixes[1:zone_space_dim])
+    n_coord_nodes = count(name -> has_child(gridCoordinates; name), suffixes)
+    coords = zeros(eltype(tmpX), length(tmpX), n_coord_nodes)
+    for (idim, suffix) in enumerate(suffixes[1:n_coord_nodes])
         node = get_child(gridCoordinates; name = "Coordinate" * suffix)
         coords[:, idim] .= flatten_struct_to_unstr(get_value(node))
     end
 
     # Resize the `coords` array if necessary
-    _space_dim =
+    space_dim =
         usr_space_dim > 0 ? usr_space_dim : compute_space_dim(topo_dim, coords; verbose)
-    coords = coords[:, 1:_space_dim]
+    coords = coords[:, 1:space_dim]
 
     return coords
 end
