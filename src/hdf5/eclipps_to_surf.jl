@@ -51,7 +51,7 @@ end
 function extract_surf_from_unstr_eclipps(zone, topodim, spacedim, bcnames, verbose)
 
     # Read zone, but only elements of topology less than 1 compared to the zone dim
-    @unpack coords, c2t, c2n, cell_ln_to_gn, bcs =
+    @unpack coords, c2t, c2n, cell_ln_to_gn =
         read_zone(zone, nothing, topodim - 1, spacedim, verbose)
 
     # Create the glob to local numbering. Indeed, we extracted only surfacic elements so c2t[1]

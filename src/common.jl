@@ -9,13 +9,11 @@ const BCUBE_ENTITY_TO_CGNS_ENTITY = Dict(
     Bcube.Quad4_t => 7,
     Bcube.Quad8_t => 8,
     Bcube.Quad9_t => 9,
-    Bcube.Quad16_t => 27,
     Bcube.Tetra4_t => 10,
     Bcube.Tetra10_t => 11,
     Bcube.Pyra5_t => 12,
     Bcube.Penta6_t => 14,
     Bcube.Hexa8_t => 17,
-    Bcube.Hexa27_t => 27,
 )
 const CGNS_ENTITY_TO_BCUBE_ENTITY = Dict(v => k for (k, v) in BCUBE_ENTITY_TO_CGNS_ENTITY)
 

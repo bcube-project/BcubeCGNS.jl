@@ -290,19 +290,25 @@ function read_zoneBC(zone, elts, verbose)
     isnothing(zoneBC) && (return nothing)
 
     # Read each BC
-    bcs = map(bc -> read_bc(bc, elts, verbose), get_children(zoneBC; label = CGNS.BC_t))
+    bcs = if read_zone_type(zone) == "Unstructured"
+        map(bc -> read_bc_unstr(bc, elts, verbose), get_children(zoneBC; label = CGNS.BC_t))
+    else
+        @warn "Reading Structured zone bcs is not implemented yet"
+        nothing
+    end
+
     return bcs
 end
 
 """
-Read a BC node.
+Read a BC node from an Unstructured zone.
 
 `elts` is an input corresponding to the zone connectivity "Elements" nodes.
 
 Return a named Tuple (bcname, bcnodes, bcdim) where bcnodes is an array of the nodes
 belonging to this BC.
 """
-function read_bc(bc, elts, verbose)
+function read_bc_unstr(bc, elts, verbose)
     # BC name
     familyName = get_child(bc; label = CGNS.FamilyName_t)
     bcname = isnothing(familyName) ? get_name(bc) : get_value(familyName)
@@ -316,7 +322,7 @@ function read_bc(bc, elts, verbose)
     # BC topodim : it's not always possible to determine it, so it's negative by default
     bcdim = -1
 
-    if bc_type in ["CellCenter", "FaceCenter"]
+    if bc_type in ("CellCenter", "FaceCenter")
         if !isnothing(indexRange)
             verbose && println("GridLocation is $(bc_type) with IndexRange")
 
@@ -381,6 +387,8 @@ function read_bc(bc, elts, verbose)
             unique!(bcnodes)
 
         elseif !isnothing(pointList)
+            verbose && println("GridLocation is $(bc_type) with PointList")
+
             # Elements indices
             bc_elts_ind = read_index(pointList)
             sort!(bc_elts_ind)
@@ -391,38 +399,35 @@ function read_bc(bc, elts, verbose)
             bcnodes = T[]
             sizehint!(bcnodes, nelts_bc * 4) # we assume 4 nodes by elements
 
-            icurr = 1
-            for elt in elts
-                verbose && println("Searching for elements in Elements_t '$(elt.name)'")
-                i1 = elt.erange[1]
-                i2 = elt.erange[end]
+            # Sort the "Elements_t" nodes by the beginning of their "ElementRange"
+            # so that the "eranges_ends" vector below is sorted in increasing order
+            # (required by the "searchsortedfirst" call below)
+            sorted_elts = sort(elts; by = elt -> first(elt.erange))
+
+            # For each BC element, find the "Elements_t" node it belongs to (binary
+            # search) and extract the nodes of this element in the (flattened)
+            # connectivity. Contrary to the "IndexRange" case above, no assumption
+            # is made on the contiguity of the element indices listed in the PointList.
+            eranges_ends = [last(elt.erange) for elt in sorted_elts]
+            for e in bc_elts_ind
+                k = searchsortedfirst(eranges_ends, e)
+                if (k > length(sorted_elts)) || (e < first(sorted_elts[k].erange))
+                    error(
+                        "BC '$(bcname)': element $e does not belong to any Elements_t node",
+                    )
+                end
+                elt = sorted_elts[k]
                 etype = cgns_entity_to_bcube_entity(first(elt.c2t))
                 nnodes_by_elt = nnodes(etype)
-
-                (bc_elts_ind[icurr] < i1) && continue
-                (bc_elts_ind[icurr] > i2) && continue
-
-                if bc_elts_ind[end] <= i2
-                    iEnd = bc_elts_ind[end]
-                else
-                    iEnd = findfirst(i -> i > i2, view(bc_elts_ind, icurr:nelts_bc)) - 1
-                end
-                offset = (bc_elts_ind[icurr] - i1) * nnodes_by_elt
-                push!(bcnodes, elt.c2n[(1 + offset):(nnodes_by_elt * (iEnd - i1 + 1))]...)
-                icurr = iEnd + 1
-
-                (icurr > nelts_bc) && break
-
-                # Element-wise version (OK, but very slow)
-                # while i1 <= elts_ind[icurr] <= i2
-                #     offset = (elts_ind[icurr] - i1) * nnodes_by_elt
-                #     push!(bcnodes, elt.c2n[(1 + offset):(offset + nnodes_by_elt)]...)
-                #     (icurr == nelts_bc) && break
-                #     icurr += 1
-                # end
+                offset = (e - first(elt.erange)) * nnodes_by_elt
+                append!(bcnodes, view(elt.c2n, (1 + offset):(offset + nnodes_by_elt)))
             end
 
-            @assert icurr >= nelts_bc
+            # Once we've found all the nodes, we must remove duplicates
+            # Note : using sort! + unique! is much more efficient than calling "unique"
+            sort!(bcnodes)
+            unique!(bcnodes)
+            verbose && println("$(length(bcnodes)) nodes found for BC '$(bcname)'")
         else
             error("Could not find either the PointRange nor the PointList")
         end
