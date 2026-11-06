@@ -1,0 +1,19 @@
+[deps]
+Bcube = "cf06320b-b7f3-4748-8003-81a6b6979792"
+BcubeCGNS = "a9bead8e-c4b5-4f51-8a4e-84805ae90250"
+BcubeGmsh = "8c8b3700-392b-4630-b974-b8b78831232a"
+BcubeMPI = "7a349a50-e992-4b55-b2ad-27ebb30b8e81"
+HauntedArrays = "88ea1a40-65ed-4bf4-98f2-fb8783b28482"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+MPICH_jll = "7cb0a576-ebde-5e09-9194-50597f1243b4"
+MPIPreferences = "3da0fdf6-3ccc-4f1b-acd9-58baa6c99267"
+MPIUtils = "d2fda7fa-1d8f-42bf-b3ab-bccc7e8e7842"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+
+[compat]
+Bcube = "0.4.2"
+BcubeCGNS = "0.1.4"
+BcubeGmsh = "0.3.1"
+BcubeMPI = "0.1.4"
