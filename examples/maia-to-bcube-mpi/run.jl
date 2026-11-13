@@ -22,7 +22,11 @@ function tree_to_bcube(tree_as_list, ghost_tag2part, comm_py2f)
 end
 
 """
-Rq : this example is a bit over-complicated to preserve "array in memory"
+    setup_simulation(bcube_io, c::AbstractVector)
+
+Set up a simulation using mesh IO data and shared coefficient storage.
+
+The example preserves the coefficient array in memory.
 """
 function setup_simulation(bcube_io, c::AbstractVector)
     dmesh = bcube_io.dmesh

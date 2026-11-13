@@ -3,8 +3,11 @@ import Bcube:
     MeshConnectivity, nnodes, get_element_type, connectivities_indices, connectivities
 
 """
-Is `ctype` necessary here since we already have it as a type parameter?
-`C` is a NamedTuple of connectivities (ex "cell-to-node" or "face-to-node")
+    CGNSSubDomain{T <: Bcube.AbstractEntityType, C} <: Bcube.AbstractSubDomain
+
+Store a selection of CGNS entities with one Bcube element type.
+
+`C` is a NamedTuple of connectivities, such as cell-to-node or face-to-node.
 """
 struct CGNSSubDomain{T <: Bcube.AbstractEntityType, C} <: Bcube.AbstractSubDomain
     etype::T
@@ -21,8 +24,11 @@ function Bcube.connectivities_indices(sdom::CGNSSubDomain, c::Symbol)
 end
 
 """
-`selection` are the elements, in the `eltNode`, that should populate this subdomain. Indeed the user might want only a portion of
-the subdomain.
+    CGNSSubDomain(eltNode::CGNSNode{Elements_t}, selection, l2g)
+
+Construct a subdomain from selected entries of an Elements_t section.
+
+`selection` identifies entries within `eltNode`.
 `l2g` is the local (in the subdomain) to global (in the mesh-cell-numbering, or mesh-face-numbering) correspondance
 """
 function CGNSSubDomain(eltNode::CGNSNode{Elements_t}, selection, l2g)
@@ -54,12 +60,18 @@ function CGNSSubDomain(eltNode::CGNSNode{Elements_t}, selection, l2g)
 end
 
 """
-`indices` are to be interpreted as indices in the "cell numbering", not the global CGNS element numbering.
+    Bcube.build_subdomains_by_celltypes(
+        ::Bcube.AbstractBcubeBackend,
+        mesh::CGNSMesh{topoDim},
+        indices,
+    ) where {topoDim}
 
-Assomptions:
+Build subdomains grouped by cell type for a single-zone CGNS mesh.
+
+`indices` uses mesh cell numbering rather than global CGNS element numbering.
+
+Assumptions:
 * unique Zone_t
-
-This function seems over-complicated, it needs to be simplified/clarified
 """
 function Bcube.build_subdomains_by_celltypes(
     ::Bcube.AbstractBcubeBackend,
@@ -137,7 +149,12 @@ end
 Bcube.CellDomain(mesh::CGNSMesh, indices) = Bcube.build_cell_domain(mesh, indices)
 
 """
-Note : `indices` not supported for now
+    Bcube.InteriorFaceDomain(mesh::CGNSMesh)
+
+Construct an interior-face domain for a CGNS mesh.
+
+This experimental method is incomplete and raises an error. Selecting `indices`
+is unsupported.
 """
 function Bcube.InteriorFaceDomain(mesh::CGNSMesh)
     Ω = Bcube.build_cell_domain(mesh, 1:ncells(mesh))

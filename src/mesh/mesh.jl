@@ -14,6 +14,10 @@ import BcubeCGNS.CGNS:
 abstract type AbstractCGNSMesh{topoDim, spaceDim} <: AbstractMesh{topoDim, spaceDim} end
 
 """
+    CGNSMesh{topoDim, spaceDim, Z, C, B} <: AbstractCGNSMesh{topoDim, spaceDim}
+
+Represent a single-zone mesh using its decoded CGNS tree and coordinate arrays.
+
 `Z` is an array or tuple of zones.
 
 `coords_by_dim` is, for each zone, a Tuple containing the arrays (CoordinateX, CoordinateY, ...)
@@ -45,7 +49,12 @@ function Bcube.ncells(mesh::CGNSMesh{topoDim}) where {topoDim}
 end
 
 """
-Potential performance issue here!
+    Bcube.get_nodes(
+        mesh::CGNSMesh{topoDim, spaceDim},
+        indices,
+    ) where {topoDim, spaceDim}
+
+Return Bcube nodes for the selected indices of a single-zone CGNS mesh.
 """
 function Bcube.get_nodes(
     mesh::CGNSMesh{topoDim, spaceDim},
@@ -60,7 +69,7 @@ function Bcube.get_nodes(
 end
 
 function CGNSMesh(cgnsTree, backend = Bcube.get_bcube_backend())
-    base = first(get_children_from_label(cgnsTree, CGNSBase_t))
+    base = get_cgns_base(cgnsTree)
     topoDim, spaceDim = CGNS.get_value(base)
     zones = get_children_from_label(base, Zone_t)
     @assert length(zones) == 1 "Only one Zone_t supported for now"

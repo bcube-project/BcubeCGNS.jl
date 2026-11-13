@@ -1,4 +1,8 @@
-""" Top level abstract type for all abstract types defined here """
+"""
+    AbstractCGNSType
+
+Represent the root of the CGNS type hierarchy.
+"""
 abstract type AbstractCGNSType end
 
 abstract type AbstractCGNSNode <: AbstractCGNSType end
@@ -6,9 +10,10 @@ abstract type AbstractCGNSNode <: AbstractCGNSType end
 """
     CGNSNode{L, V, C} <: AbstractCGNSNode
 
-`L` is an CGNSLabel
-`V` is usually a `Vector`
-`C` is a vector of `CGNSNode` or `Nothing` if there is no child (I have not decided yet)
+Store a named CGNS node with its label, value and children.
+
+`L` is a CGNSLabel, `V` is the stored value type and `C` is the child-container
+type.
 """
 struct CGNSNode{L, V, C} <: AbstractCGNSNode
     name::String

@@ -1,3 +1,8 @@
+# CGNS ElementType_t codes for variable-arity sections.
+const CGNS_MIXED = 20
+const CGNS_NGON_n = 22
+const CGNS_NFACE_n = 23
+
 const BCUBE_ENTITY_TO_CGNS_ENTITY = Dict(
     Bcube.Node_t => 2,
     Bcube.Bar2_t => 3,
@@ -28,8 +33,9 @@ function is_volumic_entity(code::Integer, topo_dim)
 end
 
 """
-Indicate if the Elements node contains "volumic" entities (with respect
-to the `topo_dim` argument)
+    is_volumic_entity(obj, topo_dim)
+
+Return whether an Elements node contains entities of dimension `topo_dim`.
 """
 function is_volumic_entity(obj, topo_dim)
     @assert get_cgns_type(obj) == "Elements_t"

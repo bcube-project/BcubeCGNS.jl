@@ -1,5 +1,15 @@
 """
-`nmax`: max number of results
+    get_nodes_from_predicate(
+        root,
+        condition;
+        depth = typemax(Int),
+        nmax = typemax(Int),
+        kwargs...,
+    )
+
+Return nodes satisfying `condition`, including the root, in traversal order.
+
+`depth` limits recursion and `nmax` limits the number of results.
 """
 function get_nodes_from_predicate(
     root,
@@ -30,16 +40,17 @@ function get_nodes_from_label(root, label::Union{String, CGNSLabel}; kwargs...)
 end
 
 function get_nodes_from_name(root, name::Union{String, Regex}; kwargs...)
-    r = name isa Regex ? name : Regex(name)
-    get_nodes_from_predicate(root, n -> occursin(r, get_name(n)); kwargs...)
+    get_nodes_from_predicate(root, n -> matches_name(name, get_name(n)); kwargs...)
 end
 
+matches_name(name::AbstractString, candidate) = name == candidate
+matches_name(name::Regex, candidate) = occursin(name, candidate)
+
 function get_nodes_from_name_and_label(root, name, label; kwargs...)
-    r = name isa Regex ? name : Regex(name)
     L = label isa CGNSLabel ? label : STRING_TO_CGNS_LABEL[label]
     get_nodes_from_predicate(
         root,
-        n -> occursin(r, get_name(n)) && (get_label(n) == L);
+        n -> matches_name(name, get_name(n)) && (get_label(n) == L);
         kwargs...,
     )
 end
@@ -56,12 +67,18 @@ function get_node_from_name_and_label(root, name, label; kwargs...)
     first(get_nodes_from_name_and_label(root, name, label; nmax = 1, kwargs...))
 end
 
-function get_children_from_predicate(root, condition; kwargs...)
-    get_nodes_from_predicate(root, condition; depth = 1, kwargs...)
+function get_children_from_predicate(root, condition; nmax = typemax(Int))
+    result = CGNSNode[]
+    for child in get_children(root)
+        length(result) >= nmax && break
+        condition(child) && push!(result, child)
+    end
+    return result
 end
 
 function get_children(root; name = nothing, label = nothing, kwargs...)
-    @assert !(isnothing(name) && isnothing(label))
+    (isnothing(name) && isnothing(label)) &&
+        throw(ArgumentError("At least one of name and label is required"))
     if isnothing(name)
         return get_children_from_label(root, label; kwargs...)
     elseif isnothing(label)
@@ -72,35 +89,63 @@ function get_children(root; name = nothing, label = nothing, kwargs...)
 end
 
 function get_children_from_label(root, label; kwargs...)
-    get_nodes_from_label(root, label; depth = 1, kwargs...)
+    L = label isa CGNSLabel ? label : STRING_TO_CGNS_LABEL[label]
+    get_children_from_predicate(root, n -> get_label(n) == L; kwargs...)
 end
 
 function get_children_from_name(root, name; kwargs...)
-    get_nodes_from_name(root, name; depth = 1, kwargs...)
+    get_children_from_predicate(root, n -> matches_name(name, get_name(n)); kwargs...)
 end
 
 function get_children_from_name_and_label(root, name, label; kwargs...)
-    get_nodes_from_name_and_label(root, name, label; depth = 1, kwargs...)
+    L = label isa CGNSLabel ? label : STRING_TO_CGNS_LABEL[label]
+    get_children_from_predicate(
+        root,
+        n -> matches_name(name, get_name(n)) && get_label(n) == L;
+        kwargs...,
+    )
 end
 
-function get_child_from_predicate(root, condition; kwargs...)
-    first_or_nothing(get_children_from_predicate(root, condition; nmax = 1))
+function get_child_from_predicate(root, condition; required = false, unique = false)
+    nodes = get_children_from_predicate(root, condition; nmax = unique ? 2 : 1)
+    required &&
+        isempty(nodes) &&
+        error("Missing child matching predicate in '$(get_name(root))'")
+    unique &&
+        length(nodes) > 1 &&
+        error("Duplicate children matching predicate in '$(get_name(root))'")
+    return first_or_nothing(nodes)
 end
 
 function get_child_from_label(root, label; kwargs...)
-    first_or_nothing(get_children_from_label(root, label; nmax = 1))
+    get_child(root; label, kwargs...)
 end
 
 function get_child_from_name(root, name; kwargs...)
-    first_or_nothing(get_children_from_name(root, name; nmax = 1))
+    get_child(root; name, kwargs...)
 end
 
 function get_child_from_name_and_label(root, name, label; kwargs...)
-    first_or_nothing(get_children_from_name_and_label(root, name, label); kwargs...)
+    get_child(root; name, label, kwargs...)
 end
 
-function get_child(root; name = nothing, label = nothing, kwargs...)
-    first_or_nothing(get_children(root; name, label, kwargs...))
+"""
+    get_child(root; name = nothing, label = nothing, required = false, unique = false)
+
+Return the first matching direct child, or `nothing` when absent.
+
+Strings match exact names; Regex inputs request pattern matching. At least one
+of `name` and `label` is required. Set `required` to reject missing matches and
+`unique` to reject duplicates independently. The parent is never a candidate.
+"""
+function get_child(root; name = nothing, label = nothing, required = false, unique = false)
+    nodes = get_children(root; name, label, nmax = unique ? 2 : 1)
+    if (required && isempty(nodes)) || (unique && length(nodes) > 1)
+        context = "child (name=$(repr(name)), label=$label) in '$(get_name(root))'"
+        reason = isempty(nodes) ? "Missing" : "Duplicate"
+        error("$reason $context")
+    end
+    return first_or_nothing(nodes)
 end
 
 function has_child(root; name = nothing, label = nothing, kwargs...)

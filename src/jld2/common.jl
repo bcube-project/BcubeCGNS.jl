@@ -3,8 +3,11 @@ struct CGNSJLD2IoHandler <: Bcube.AbstractIoHandler end
 Bcube._filename_to_handler(::Val{:jld2}) = CGNSJLD2IoHandler()
 
 """
-Wrapper for the JLD2.Group struct to keep track of the attributes associated to a Group
-without needing the parent.
+    Node{T}
+
+Wrap a JLD2 group together with its name and CGNS attributes.
+
+The wrapper provides attribute access without retaining the parent group.
 """
 struct Node{T}
     node::T
@@ -45,7 +48,12 @@ function parse_attributes(parent, node_name)
 end
 
 """
-We could make this function type-stable by converting the "type" attribute to a type-parameter of `Node`
+    jld2_get_value(n::Node)
+
+Read a JLD2 node's stored value using its CGNS datatype attribute.
+
+The runtime datatype attribute determines whether the result is a string or
+a numeric array.
 """
 function jld2_get_value(n::Node)
     data_type = get_data_type(n)
