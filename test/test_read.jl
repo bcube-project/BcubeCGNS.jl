@@ -1,3 +1,7 @@
+# Accepted file-to-VTK regressions use the Julia-version checksum table selected
+# by runtests.jl. They cover serialization and downstream MeshData dispatch;
+# independent topology/association evidence lives in test_reader_*.jl. Preserve
+# these hashes unless actual VTU differences have been inspected and justified.
 @testset "Read" begin
     @testset "Unstructured" begin
         @testset "CGNS base = 1 2" begin

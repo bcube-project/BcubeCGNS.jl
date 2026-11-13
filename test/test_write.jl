@@ -7,14 +7,14 @@
     # write_file(filepath, mesh, Dict("Temperature" => u))
     write_file(filepath, mesh, Dict("Temperature" => u), 1)
 
-    result = read_file(filepath; varnames = "*")
+    result = read_file(filepath; varnames = "*", timestep = 1)
     @test get_values(result.data["FlowSolutionVertex#1"]["Temperature"]) ==
           [1.0, 2.0, 5.0, 3.0, 4.0, 6.0]
 
     set_dof_values!(u, 2.0 * collect(1:get_ndofs(U)))
     write_file(filepath, mesh, Dict("Temperature" => u), 2; collection_append = true)
 
-    result = read_file(filepath; varnames = "*")
+    result = read_file(filepath; varnames = "*", timestep = 2)
     @test get_values(result.data["FlowSolutionVertex#2"]["Temperature"]) ==
           2 .* [1.0, 2.0, 5.0, 3.0, 4.0, 6.0]
 end

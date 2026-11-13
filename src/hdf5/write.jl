@@ -47,6 +47,18 @@ function Bcube.write_file(
 end
 
 """
+    append_to_cgns_file(
+        file,
+        mesh,
+        data,
+        U_export,
+        it,
+        time;
+        verbose = false,
+        update_mesh = false,
+        skip_iterative_data,
+    )
+
 Append data to an existing file.
 """
 function append_to_cgns_file(
@@ -92,7 +104,18 @@ function append_to_cgns_file(
 end
 
 """
-Create the whole file from scratch
+    create_cgns_file(
+        file,
+        mesh,
+        data,
+        U_export,
+        it,
+        time;
+        verbose,
+        skip_iterative_data,
+    )
+
+Create a CGNS file containing the supplied mesh and data.
 """
 function create_cgns_file(
     file,
@@ -185,7 +208,10 @@ function create_cgns_file(
 end
 
 """
-Special stuff for the root node
+    set_cgns_root!(root)
+
+Set the CGNS root node attributes and metadata.
+
 Adapted from Maia :
 https://github.com/onera/Maia/blob/3a5030aa3b0696cdbae0c9dd08ac641842be33a3/maia/io/hdf/_hdf_cgns.py#L95
 """
@@ -270,6 +296,8 @@ function create_cgns_elements(mesh, zone; write_bnd_faces = false, verbose = fal
 end
 
 """
+    create_cgns_bcs(mesh, zone; verbose = false)
+
 Create the ZoneBC node and the associated BC nodes.
 
 For now, BCs are defined by a list of nodes. We could implement a version where BCs
@@ -292,7 +320,11 @@ function create_cgns_bcs(mesh, zone; verbose = false)
 end
 
 """
-`append` indicates if the FlowSolution(s) may already exist (and hence completed) or not.
+    create_flow_solutions(mesh, zone, data, U_export, it, append; verbose = false)
+
+Create named or default FlowSolutions from exported data.
+
+`append` indicates whether existing FlowSolutions may be completed.
 """
 function create_flow_solutions(mesh, zone, data, U_export, it, append; verbose = false)
     if valtype(data) <: Dict
@@ -307,7 +339,18 @@ function create_flow_solutions(mesh, zone, data, U_export, it, append; verbose =
 end
 
 """
-This function is a trick to refactor some code
+    create_flow_solutions(
+        mesh,
+        zone,
+        data,
+        U_export,
+        fname,
+        it,
+        append;
+        verbose = false,
+    )
+
+Create cell-centered and vertex-centered FlowSolutions for one named dataset.
 """
 function create_flow_solutions(
     mesh,
@@ -347,7 +390,11 @@ function create_flow_solutions(
 end
 
 """
-WARNING : vector variables are not supported for now !!
+    create_flow_solution(zone, data, fname, isVertex, projection, append; verbose)
+
+Create or complete one FlowSolution with projected scalar variables.
+
+Vector variables are unsupported.
 """
 function create_flow_solution(zone, data, fname, isVertex, projection, append; verbose)
     isempty(data) && return
@@ -446,6 +493,8 @@ function create_cgns_base_iterative_data(parent, zonename, it, time)
 end
 
 """
+    append_to_base_iterative_data(cgnsBase, zonename, it, time; verbose)
+
 # Warnings
 * CGNS also allows for a "TimeDurations" node instead of "IterationValues"
 * a unique zone is assumed
@@ -498,6 +547,8 @@ function append_to_base_iterative_data(cgnsBase, zonename, it, time; verbose)
 end
 
 """
+    create_cgns_zone_iterative_data(zone, it; verbose)
+
 Call to this function must be performed AFTER the FlowSolution creation
 """
 function create_cgns_zone_iterative_data(zone, it; verbose)
@@ -527,6 +578,8 @@ function create_cgns_zone_iterative_data(zone, it; verbose)
 end
 
 """
+    append_to_zone_iterative_data(zone, it; verbose)
+
 Call to this function must be performed AFTER the FlowSolution creation
 
 # Warning
@@ -640,7 +693,11 @@ function set_cgns_attr!(obj, name, label, type)
 end
 
 """
-It is not trivial to match the exact datatype for attributes.
+    add_cgns_string_attr!(obj, name, value, length = sizeof(value))
+
+Write a fixed-length CGNS string attribute with its explicit HDF5 datatype.
+
+Matching the exact datatype for attributes requires care.
 
 https://discourse.julialang.org/t/hdf5-jl-variable-length-string/98808/11
 

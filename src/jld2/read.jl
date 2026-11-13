@@ -61,6 +61,8 @@ function Bcube.read_file(
 end
 
 """
+    jld2_cgns_mesh_to_bcube_mesh(zoneCGNS)
+
 Convert CGNS Zone information into a Bcube `Mesh`.
 """
 function jld2_cgns_mesh_to_bcube_mesh(zoneCGNS)
@@ -77,9 +79,13 @@ function jld2_cgns_mesh_to_bcube_mesh(zoneCGNS)
 end
 
 """
-The input `fSols` is suppose to be a dictionnary FlowSolutionName => (gridlocation, Dict(varname => array))
+    jld2_flow_solutions_to_bcube_data(fSols)
 
-The output is a dictionnary FlowSolutionName => dictionnary(varname => MeshData)
+Convert named JLD2 FlowSolutions to dictionaries of Bcube mesh data.
+
+The input maps FlowSolution names to grid locations and variable arrays.
+
+The output maps FlowSolution names to dictionaries of variable names and MeshData.
 """
 function jld2_flow_solutions_to_bcube_data(fSols)
     # length(fSols) == 0 && (return Dict(), Dict())
@@ -108,6 +114,8 @@ function jld2_flow_solutions_to_bcube_data(fSols)
 end
 
 """
+    jld2_read_zone(zone, varnames, topo_dim, space_dim, verbose)
+
 Read a CGNS Zone node.
 
 Return a NamedTuple with node coordinates, cell-to-type connectivity (type is a integer),
@@ -159,6 +167,8 @@ function jld2_read_zone(zone, varnames, topo_dim, space_dim, verbose)
 end
 
 """
+    jld2_read_zoneBC(zone, elts, verbose)
+
 Read the "ZoneBC_t" node to build bnd connectivities.
 
 See `read_bc` for more information of what is returned.
@@ -171,6 +181,8 @@ function jld2_read_zoneBC(zone, elts, verbose)
 end
 
 """
+    jld2_read_BC(bc, elts, verbose)
+
 Read a BC node.
 
 Return a named Tuple (bcname, bcnodes, bcdim) where bcnodes is an array of the nodes
@@ -318,6 +330,8 @@ function jld2_read_BC(bc, elts, verbose)
 end
 
 """
+    jld2_read_solutions(zone, varnames, verbose)
+
 Read all the flow solutions in the Zone, filtering data arrays whose name is not in the `varnames` list
 
 # TODO : check if all varnames have been found
@@ -347,6 +361,8 @@ function jld2_read_solutions(zone, varnames, verbose)
 end
 
 """
+    jld2_read_solution(fs, varnames)
+
 Read a FlowSolution node.
 
 Return a NamedTuple with flow solution name, grid location and array of vectors.
@@ -374,6 +390,8 @@ function jld2_read_solution(fs, varnames)
 end
 
 """
+    jld2_read_connectivity(node, reshape = false)
+
 Read an "Elements_t" node and returns a named Tuple of three elements:
 * `erange`, the content of the `ElementRange` node
 * `c2t`, the cell -> entity_type connectivity

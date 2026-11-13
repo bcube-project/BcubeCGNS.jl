@@ -74,7 +74,13 @@ function extract_strings(array)
     return result
 end
 
-""" WARNING : this is not a CGNS compliant file yet, it's only for debug """
+"""
+    write_cgns_file(filename::String, root::CGNSNode)
+
+Write a decoded CGNS tree to HDF5 for debugging.
+
+The output is not yet CGNS compliant.
+"""
 function write_cgns_file(filename::String, root::CGNSNode)
     h5open(filename, "w") do file
         write_cgns_node(file, root)
@@ -122,9 +128,12 @@ function is_cgns_node(n)
 end
 
 """
-    parse_tree_from_list(tree_as_list)
+    parse_tree_as_list(tree_as_list)
 
-Construct a CGNS tree from a recursive list of nodes where each node is defined as
+Construct a CGNS tree from a recursive list of nodes.
+
+Each node is defined by four entries:
+
 - the node name
 - the node value
 - a list of child nodes

@@ -2,6 +2,7 @@ module BcubeCGNS
 using Bcube
 using HDF5
 using JLD2
+using LinearAlgebra: cross
 using SparseArrays
 using UnPack
 
@@ -9,9 +10,14 @@ include("./common.jl")
 
 # CGNS tree
 include("./cgns/CGNS.jl")
-using .CGNS
 import .CGNS:
-    get_child, get_value, get_children, get_name, has_child, get_child_from_name_and_label
+    get_child,
+    get_value,
+    get_children,
+    get_name,
+    has_child,
+    get_child_from_name_and_label,
+    get_child_from_predicate
 
 # HDF5 reader/writer
 include("./hdf5/common.jl")

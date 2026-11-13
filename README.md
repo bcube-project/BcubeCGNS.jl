@@ -1,8 +1,6 @@
 # BcubeCGNS.jl
 Implementation of [`Bcube`](https://github.com/bcube-project/Bcube.jl) IO interface for CGNS format. Checkout the relative `Bcube` [documentation](https://bcube-project.github.io/Bcube.jl/stable/api/io/io_interface/) for more infos.
 
-Note that all CGNS specifications are not implemented (for instance, NGON elements).
-
 ## Basic usage
 ```julia
 using Bcube
@@ -19,6 +17,12 @@ result = read_file("output.cgns"; varnames = "*")
 mesh = result.mesh
 data = result.data # Dict of variable name (String) to MeshData
 ```
+
+## Limitations
+
+Not all CGNS representations are implemented.
+Reading NGON, NFACE (polyhedral), or MIXED elements has been implemented with AI assistance and has not been extensively validated yet. Use it with caution.
+See the [reader support and limitations](docs/reader-coverage.md).
 
 ## Development instructions
 
